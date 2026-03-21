@@ -61,7 +61,7 @@ export class ModelLoader {
 
                                     if (hex === 'ffffff') {
                                         ModelLoader.PART_NAMES_TO_COLOR.set(child.name, 0x888888);
-                                        mat.color.setHex(0xda9fbe);
+                                        mat.color.setHex(0x888888);
                                     } else if (originalColor < 0x333333) {
                                         const brightened = Math.min(0xffffff, originalColor + 0x444444);
                                         mat.color.setHex(brightened);

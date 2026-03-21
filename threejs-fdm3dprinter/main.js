@@ -6,8 +6,13 @@ import { YAxisMotion } from './printer_manager/motion/y_axis.js';
 import { ZAxisMotion } from './printer_manager/motion/z_axis.js';
 import { PrintingMotion } from './printer_manager/motion/printing_motion.js';
 
+//Test imports for printing examples
+import { PrintingExamples } from './printer_manager/motion/printing_examples.js';
+
+
 // --- Setup scene, camera, renderer ---
 const scene = new THREE.Scene();
+window.scene = scene;
 scene.background = new THREE.Color(0x888888);
 
 const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
@@ -25,7 +30,7 @@ controls.enableDamping = true;
 controls.target.set(0, 3, 0);
 
 // --- Lighting ---
-scene.add(new THREE.AmbientLight(0xffffff, 1.2));
+scene.add(new THREE.AmbientLight(0xffffff, 1.5));
 
 const dirLight = new THREE.DirectionalLight(0xffffff, 1.5);
 dirLight.position.set(5, 15, 7);
@@ -46,6 +51,19 @@ scene.add(keyLight);
 const backLight = new THREE.PointLight(0xfffacd, 0.8);
 backLight.position.set(0, 8, -15);
 scene.add(backLight);
+
+// Bed light — positioned low and in front of the printer, angled up toward the bed
+const bedLight = new THREE.SpotLight(0xffffff, 3.0);
+bedLight.position.set(0, 2, 8);       // front-center, just above floor level
+bedLight.target.position.set(0, 4, 0); // aimed at the bed surface
+bedLight.angle = Math.PI / 5;          // narrow cone — focused on the bed
+bedLight.penumbra = 0.3;               // soft edge
+bedLight.decay = 1.5;
+bedLight.distance = 30;
+bedLight.castShadow = false;           // no extra shadow cost
+bedLight.intensity = 5.0;             // brighter than other lights to highlight the bed
+scene.add(bedLight);
+scene.add(bedLight.target);
 
 // --- Ground grid and subtle floor ---
 const gridHelper = new THREE.GridHelper(20, 20, 0x888888, 0x444444);
@@ -97,7 +115,7 @@ const modelLoader = new ModelLoader(scene);
 const modelScale = 10; // Scale factor for the model (adjust as needed)
 let xAxisMotion, yAxisMotion, zAxisMotion, printer;
 
-modelLoader.loadModel('models/printer.glb', (loadedModel) => {
+modelLoader.loadModel('models/3dprinter.glb', (loadedModel) => {
   loadedModel.position.set(0, 0, 0);
   loadedModel.scale.set(modelScale, modelScale, modelScale);
   // Log dimensions of the Tisch (bed) for reference
@@ -139,6 +157,9 @@ modelLoader.loadModel('models/printer.glb', (loadedModel) => {
   }
 
   camera.lookAt(16, 16, 16);
+
+  // PrintingExamples must be inside the callback — printer is not ready before this
+  window.examples = new PrintingExamples();
 });
 
 /**
