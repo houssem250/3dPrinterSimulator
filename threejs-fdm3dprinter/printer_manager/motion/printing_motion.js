@@ -1,4 +1,5 @@
 // printing_motion.js
+import * as THREE from 'three';
 
 /**
  * PrintingMotion
@@ -44,65 +45,60 @@ export class PrintingMotion {
      * @param {object}      bedDimensions  Optional override. If omitted, read from yAxis.
      *                                     { width: mm, depth: mm }
      */
-    constructor(xAxis, yAxis, zAxis, bedDimensions = null) {
+    /**
+     * @param {XAxisMotion} xAxis
+     * @param {YAxisMotion} yAxis
+     * @param {ZAxisMotion} zAxis
+     * @param {object} options
+     *   placement: 'corner' — G-code 0,0 = front-left corner of bed (default)
+     *              'center' — G-code 0,0 = center of bed
+     *   bedDimensions: { width, depth } — override auto-detected bed size in mm
+     */
+    constructor(xAxis, yAxis, zAxis, options = {}) {
         this.xAxis = xAxis;
         this.yAxis = yAxis;
         this.zAxis = zAxis;
 
-        // ── Internal move list (G-code style objects) ──────────────────────
-        this.moves       = [];
-        this._moveIndex  = 0;
+        // ── Placement mode ─────────────────────────────────────────────────
+        // 'corner' = G-code 0,0 at bed front-left (standard slicer default)
+        // 'center' = G-code 0,0 at bed center (some slicers use this)
+        this.placement = options.placement ?? 'corner';
+
+        // ── Internal move list ─────────────────────────────────────────────
+        this.moves      = [];
+        this._moveIndex = 0;
 
         // ── Runtime state ──────────────────────────────────────────────────
-        this.isRunning     = false;
-        this.currentF      = 1800;   // mm/min — default feedrate (30 mm/s)
-        this.defaultSpeed  = 50;     // mm/s fallback if F never set
+        this.isRunning    = false;
+        this.currentF     = 1800;
+        this.defaultSpeed = 50;
 
-        // G92 offsets — added to every target position
+        // G92 offsets
         this._offsetX = 0;
         this._offsetY = 0;
         this._offsetZ = 0;
 
-        // ── Bed coordinate space ───────────────────────────────────────────
-        // Read bed dimensions from Y-axis (Tisch bounding box) or use override
-        this.bedWidth = 300;  // mm — X direction
-        this.bedDepth = 300;  // mm — Y direction
-        this._initBedDimensions(bedDimensions);
+        // ── Bed size in mm ─────────────────────────────────────────────────
+        this.bedWidth = options.bedDimensions?.width  ?? xAxis.maxTravel;
+        this.bedDepth = options.bedDimensions?.depth  ?? yAxis.maxTravel;
+
+        // ── Scene references (populated in startLiveVisualization) ─────────
+        this._tischNode   = null;
+        this._nozzleNode  = null;  // Druckkopf — used to read nozzle world pos
+        this._tischInvMat = null;  // inverse world matrix of Tisch at start time
 
         // ── Visualisation ──────────────────────────────────────────────────
-        this._pathMesh = null;
-        this.stats     = null;
-
-        // ── Legacy: keep path[] in sync for visualizePath() ───────────────
-        this.path = [];
+        this._pathMesh   = null;
+        this._liveMesh   = null;
+        this._livePoints = [];
+        this._liveScene  = null;
+        this._liveColor  = 0xff6600;
+        this.stats       = null;
+        this.path        = [];
 
         console.log('🖨️  PrintingMotion ready.');
-        console.log(`   Bed: ${this.bedWidth}×${this.bedDepth}mm`);
-        console.log(`   Axis maxTravel: X=${xAxis.maxTravel} Y=${yAxis.maxTravel} Z=${zAxis.maxTravel}`);
-    }
-
-    // ─── Bed Initialisation ───────────────────────────────────────────────────
-
-    _initBedDimensions(override) {
-        if (override) {
-            this.bedWidth = override.width;
-            this.bedDepth = override.depth;
-            return;
-        }
-
-        // Try to read from Y-axis if it exposes bed dimensions
-        if (this.yAxis && typeof this.yAxis.logTischDimensions === 'function') {
-            const dims = this.yAxis.logTischDimensions();
-            if (dims && dims.original) {
-                // logTischDimensions returns original mm dimensions
-                this.bedWidth = dims.original.width  || this.bedWidth;
-                this.bedDepth = dims.original.depth  || this.bedDepth;
-                console.log(`   Bed dimensions read from Tisch: ${this.bedWidth.toFixed(1)}×${this.bedDepth.toFixed(1)}mm`);
-                return;
-            }
-        }
-
-        console.log(`   Bed dimensions: using defaults ${this.bedWidth}×${this.bedDepth}mm`);
+        console.log(`   Bed: ${this.bedWidth}×${this.bedDepth}mm  |  placement: ${this.placement}`);
+        console.log(`   maxTravel: X=${xAxis.maxTravel} Y=${yAxis.maxTravel} Z=${zAxis.maxTravel}`);
     }
 
     // ─── Coordinate Mapping ───────────────────────────────────────────────────
@@ -305,6 +301,11 @@ export class PrintingMotion {
 
                 await this._delay(duration);
 
+                // ── Live filament: append point after move completes ──────
+                if (this._liveScene) {
+                    this._appendLivePoint(adjX, adjY, adjZ, cmd === 'G1');
+                }
+
                 curX = targX;
                 curY = targY;
                 curZ = targZ;
@@ -329,7 +330,149 @@ export class PrintingMotion {
         console.log('⏹️  Stopped at move', this._moveIndex);
     }
 
-    // ─── Visualisation ────────────────────────────────────────────────────────
+    // ─── Live Filament Visualisation ─────────────────────────────────────────
+
+    /**
+     * Call this BEFORE executePath() to enable live filament drawing.
+     * The filament line grows move by move as the print executes.
+     *
+     * @param {THREE.Scene} scene
+     * @param {number} scale   mm → scene units (default 0.1, matching modelScale=10)
+     * @param {number} color   filament color hex (default orange 0xff6600)
+     */
+    /**
+     * Call BEFORE executePath() to enable live filament drawing.
+     *
+     * ── Core principle ───────────────────────────────────────────────────────
+     * Instead of computing where the filament should be from G-code mm,
+     * we read the ACTUAL NOZZLE WORLD POSITION at each deposit moment.
+     * This guarantees perfect sync — no coordinate math, no offsets to guess.
+     *
+     * The point is then projected onto the bed top surface (constant Y),
+     * converted to Tisch LOCAL space, and stored there so it rides with the bed.
+     */
+    startLiveVisualization(scene, color = 0xff6600) {
+        this._liveScene  = scene;
+        this._liveColor  = color;
+        this._livePoints = [];
+        this._clearLiveMesh();
+
+        // Find Tisch and Druckkopf (nozzle)
+        this._tischNode  = null;
+        this._nozzleNode = null;
+        scene.traverse(c => {
+            if (c.name === 'Tisch')     this._tischNode  = c;
+            if (c.name === 'Druckkopf') this._nozzleNode = c;
+        });
+
+        if (!this._tischNode) {
+            console.warn('⚠️  Tisch not found — live filament disabled');
+            return;
+        }
+        if (!this._nozzleNode) {
+            console.warn('⚠️  Druckkopf not found — filament will use bed center');
+        }
+
+        // Measure bed top Y (constant — bed only moves in Z)
+        this._tischNode.updateWorldMatrix(true, true);
+        const box = new THREE.Box3().setFromObject(this._tischNode);
+        this._bedTopY = box.max.y;
+
+        console.log(`🎨 Live filament ready — nozzle tracking enabled`);
+        console.log(`   Bed top Y: ${this._bedTopY.toFixed(4)}`);
+        return this;
+    }
+
+    /**
+     * Append one deposit point — G1 only.
+     *
+     * Reads the CURRENT nozzle world X and Z directly from Druckkopf bounding box.
+     * Projects onto bed surface (bedTopY).
+     * Converts to Tisch local space so it moves with the bed.
+     *
+     * gcodeZ is only used for layer height offset above bed surface.
+     */
+    _appendLivePoint(gcodeX, gcodeY, gcodeZ, isPrint) {
+        if (!this._liveScene || !isPrint) return;
+        if (!this._tischNode) return;
+
+        // ── Read nozzle world position directly ───────────────────────────
+        let worldX, worldZ;
+
+        if (this._nozzleNode) {
+            this._nozzleNode.updateWorldMatrix(true, true);
+            const nb = new THREE.Box3().setFromObject(this._nozzleNode);
+            worldX = (nb.min.x + nb.max.x) / 2;  // nozzle center X
+            worldZ = (nb.min.z + nb.max.z) / 2;  // nozzle center Z
+        } else {
+            // Fallback: use bed center
+            this._tischNode.updateWorldMatrix(true, true);
+            const tb = new THREE.Box3().setFromObject(this._tischNode);
+            worldX = (tb.min.x + tb.max.x) / 2;
+            worldZ = (tb.min.z + tb.max.z) / 2;
+        }
+
+        // Y = bed top surface + tiny layer offset per G-code Z mm
+        // scenePerMm estimated from bed width / bedWidth
+        this._tischNode.updateWorldMatrix(true, true);
+        const tb = new THREE.Box3().setFromObject(this._tischNode);
+        const scenePerMm = (tb.max.x - tb.min.x) / this.bedWidth;
+        const worldY = this._bedTopY + gcodeZ * scenePerMm * 0.1;
+
+        // ── Convert world → Tisch LOCAL space ────────────────────────────
+        // Fresh inverse every time — Tisch moves so the matrix changes
+        const invMat = new THREE.Matrix4().copy(this._tischNode.matrixWorld).invert();
+        const local  = new THREE.Vector3(worldX, worldY, worldZ).applyMatrix4(invMat);
+
+        this._livePoints.push({ x: local.x, y: local.y, z: local.z });
+        this._rebuildLiveMesh();
+    }
+
+    _rebuildLiveMesh() {
+        const pts = this._livePoints;
+        if (pts.length < 2) return;
+
+        this._clearLiveMesh();
+
+        const positions = new Float32Array(pts.length * 3);
+        pts.forEach((pt, i) => {
+            positions[i * 3 + 0] = pt.x;
+            positions[i * 3 + 1] = pt.y;
+            positions[i * 3 + 2] = pt.z;
+        });
+
+        const geometry = new THREE.BufferGeometry();
+        geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+
+        // All points are G1 extrusion — single color, no vertex colors needed
+        const material = new THREE.LineBasicMaterial({ color: this._liveColor, linewidth: 2 });
+        this._liveMesh = new THREE.Line(geometry, material);
+
+        // Parent to Tisch — moves with the bed automatically
+        const parent = this._tischNode || this._liveScene;
+        parent.add(this._liveMesh);
+    }
+
+    _clearLiveMesh() {
+        if (this._liveMesh) {
+            // Remove from wherever it was parented (Tisch or scene)
+            if (this._liveMesh.parent) {
+                this._liveMesh.parent.remove(this._liveMesh);
+            }
+            this._liveMesh.geometry.dispose();
+            this._liveMesh.material.dispose();
+            this._liveMesh = null;
+        }
+    }
+
+    clearLiveVisualization() {
+        this._clearLiveMesh();
+        this._livePoints = [];
+        this._liveScene  = null;
+        console.log('🗑️  Live filament cleared.');
+    }
+
+    // ─── Legacy: show the planned path before printing ────────────────────────
 
     visualizePath(scene, mmToScene = 0.1, color = 0x00ff88) {
         if (!scene) { console.warn('⚠️  Pass scene as first argument.'); return; }
@@ -354,7 +497,7 @@ export class PrintingMotion {
             this._pathMesh = new Line(geometry, new LineBasicMaterial({ color, linewidth: 2 }));
             scene.add(this._pathMesh);
 
-            console.log(`🎨 Path visualised (${this.path.length} points)`);
+            console.log(`🎨 Planned path visualised (${this.path.length} points)`);
         });
 
         return this;
@@ -365,7 +508,7 @@ export class PrintingMotion {
             scene.remove(this._pathMesh);
             this._pathMesh.geometry.dispose();
             this._pathMesh = null;
-            console.log('🗑️  Visualisation cleared.');
+            console.log('🗑️  Planned path cleared.');
         }
     }
 
