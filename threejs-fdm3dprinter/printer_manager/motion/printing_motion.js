@@ -1,586 +1,421 @@
-// printing_motion.js
-import * as THREE from 'three';
-
 /**
- * PrintingMotion
+ * @file printing_motion.js
+ * @description Executes a G-code-style move list on the three printer axes
+ * and renders live filament as the print progresses.
  *
- * Accepts a move list in G-code-style format and executes it on the three axes.
+ * Coordinate system
+ * ──────────────────
+ * G-code works in mm with the origin at the bed's front-left corner
+ * (or center when `placement = 'center'`).
  *
- * ─── Coordinate system ────────────────────────────────────────────────────
- *  G-code works in mm, with 0,0 at the bed front-left corner.
- *  The bed size (Tisch) is read from the Y-axis at init time.
- *  G-code X mm → mapped proportionally to xAxis.maxTravel
- *  G-code Y mm → mapped proportionally to yAxis.maxTravel
- *  G-code Z mm → mapped proportionally to zAxis.maxTravel
+ *   G-code X mm  →  mapped proportionally to xAxis.maxTravel
+ *   G-code Y mm  →  mapped proportionally to yAxis.maxTravel
+ *   G-code Z mm  →  mapped proportionally to zAxis.maxTravel
  *
- *  This means: if the bed is 300×300mm and maxTravel is 300, the mapping
- *  is 1:1. If the model's bed is a different size, it scales automatically.
+ * Supported move commands
+ * ────────────────────────
+ *   G0  { X, Y, Z, F }    Rapid move (no extrusion)
+ *   G1  { X, Y, Z, F }    Print move (with extrusion)
+ *   G28 { X?, Y?, Z? }    Home specified axes (no args = home all)
+ *   G92 { X?, Y?, Z? }    Set position offset (virtual zero)
  *
- * ─── Supported commands ───────────────────────────────────────────────────
- *  G0  { X, Y, Z, F }   — rapid move (no extrusion)
- *  G1  { X, Y, Z, F }   — print move (with extrusion)
- *  G28 { X?, Y?, Z? }   — home specified axes (no args = home all)
- *  G92 { X?, Y?, Z? }   — set current position as offset (position reset)
+ * F (feedrate mm/min) persists across moves — exactly like a real printer.
+ * Omitted X/Y/Z in a move means "stay at current position on that axis".
  *
- *  F (feedrate mm/min) persists across moves — just like a real printer.
- *  Omitted X/Y/Z in a move means "stay at current position on that axis".
+ * What changed from the original
+ * ───────────────────────────────
+ *  - `_mapZ()` had a divide-then-multiply-by-maxTravel bug (identity op).
+ *    Fixed: Z maps the same way as X and Y.
+ *  - Duplicate `@param` JSDoc block on the constructor removed.
+ *  - `_homeAll()` private helper removed — the same logic is inline in
+ *    `executePath()` under `G28`, where it belongs.
+ *  - `_addMove()` legacy helper removed — unused after path generators were
+ *    rewritten to build move lists directly.
+ *  - `generateSquarePath()` / `generateCirclePath()` moved to
+ *    `gcode/path_generators.js` — they have no dependency on `this` state
+ *    beyond `loadMoves()`, so they don't belong on this class.
+ *  - `startLiveVisualization()` / `_appendLivePoint()` / `_rebuildLiveMesh()`
+ *    extracted to `visualization/filament_renderer.js` — keeping the
+ *    execution engine free of rendering concerns.
+ *  - `visualizePath()` (pre-print path preview) moved to
+ *    `visualization/path_preview.js`.
  *
- * ─── Move list format ─────────────────────────────────────────────────────
- *  Each entry is a plain object:
- *  { cmd: 'G1', X: 100, Y: 50, Z: 0.2, F: 3000 }
- *  { cmd: 'G28' }
- *  { cmd: 'G92', Z: 0 }
- *
- * ─── Backward compatibility ───────────────────────────────────────────────
- *  generateSquarePath() and generateCirclePath() still work — they now
- *  build a G-code move list internally and call loadMoves().
- *  loadCustomPath() is kept as an alias for loadMoves() with raw {x,y,z,speed}.
+ * @module printer_manager/motion/printing_motion
  */
+
+import { PRINTER_CONFIG } from '../../config/printer_config.js';
+
+const {
+  DEFAULT_FEEDRATE_MM_MIN,
+  DEFAULT_SPEED_MULTIPLIER,
+  DEFAULT_PLACEMENT,
+  MIN_MOVE_DURATION_MS,
+  HOME_DURATION_MS,
+  HOME_SETTLE_MS,
+} = PRINTER_CONFIG.PRINTING;
+
 export class PrintingMotion {
 
-    /**
-     * @param {XAxisMotion} xAxis
-     * @param {YAxisMotion} yAxis
-     * @param {ZAxisMotion} zAxis
-     * @param {object}      bedDimensions  Optional override. If omitted, read from yAxis.
-     *                                     { width: mm, depth: mm }
-     */
-    /**
-     * @param {XAxisMotion} xAxis
-     * @param {YAxisMotion} yAxis
-     * @param {ZAxisMotion} zAxis
-     * @param {object} options
-     *   placement: 'corner' — G-code 0,0 = front-left corner of bed (default)
-     *              'center' — G-code 0,0 = center of bed
-     *   bedDimensions: { width, depth } — override auto-detected bed size in mm
-     */
-    constructor(xAxis, yAxis, zAxis, options = {}) {
-        this.xAxis = xAxis;
-        this.yAxis = yAxis;
-        this.zAxis = zAxis;
+  /**
+   * @param {import('./x_axis.js').XAxisMotion} xAxis
+   * @param {import('./y_axis.js').YAxisMotion} yAxis
+   * @param {import('./z_axis.js').ZAxisMotion} zAxis
+   * @param {object}  [options]
+   * @param {'corner'|'center'} [options.placement='corner']
+   *   G-code coordinate origin: 'corner' = front-left (slicer default),
+   *   'center' = bed center.
+   * @param {number}  [options.speedMultiplier=1]
+   *   1 = real speed, 2 = 2× faster, 10 = 10× faster (for testing).
+   * @param {{ width: number, depth: number }} [options.bedDimensions]
+   *   Override auto-detected bed size in mm.
+   */
+  constructor(xAxis, yAxis, zAxis, options = {}) {
+    this.xAxis = xAxis;
+    this.yAxis = yAxis;
+    this.zAxis = zAxis;
 
-        // ── Placement mode ─────────────────────────────────────────────────
-        // 'corner' = G-code 0,0 at bed front-left (standard slicer default)
-        // 'center' = G-code 0,0 at bed center (some slicers use this)
-        this.placement = options.placement ?? 'corner';
+    this.placement       = options.placement       ?? DEFAULT_PLACEMENT;
+    this.speedMultiplier = options.speedMultiplier ?? DEFAULT_SPEED_MULTIPLIER;
 
-        // ── Speed multiplier ───────────────────────────────────────────────
-        // 1 = real speed, 2 = 2x faster, 10 = 10x faster (for testing)
-        this.speedMultiplier = options.speedMultiplier ?? 1;
+    this.bedWidth = options.bedDimensions?.width ?? xAxis.maxTravel;
+    this.bedDepth = options.bedDimensions?.depth ?? yAxis.maxTravel;
 
-        // ── Internal move list ─────────────────────────────────────────────
-        this.moves      = [];
-        this._moveIndex = 0;
+    /** @type {Array<object>} */
+    this.moves      = [];
+    this._moveIndex = 0;
 
-        // ── Runtime state ──────────────────────────────────────────────────
-        this.isRunning    = false;
-        this.currentF     = 1800;
-        this.defaultSpeed = 50;
+    this.isRunning = false;
+    this.currentF  = DEFAULT_FEEDRATE_MM_MIN;
 
-        // G92 offsets
-        this._offsetX = 0;
-        this._offsetY = 0;
-        this._offsetZ = 0;
+    // G92 virtual-zero offsets
+    this._offsetX = 0;
+    this._offsetY = 0;
+    this._offsetZ = 0;
 
-        // ── Bed size in mm ─────────────────────────────────────────────────
-        this.bedWidth = options.bedDimensions?.width  ?? xAxis.maxTravel;
-        this.bedDepth = options.bedDimensions?.depth  ?? yAxis.maxTravel;
+    // Live filament renderer (injected by startLiveVisualization)
+    this._filamentRenderer = null;
 
-        // ── Scene references (populated in startLiveVisualization) ─────────
-        this._tischNode   = null;
-        this._nozzleNode  = null;  // Druckkopf — used to read nozzle world pos
-        this._tischInvMat = null;  // inverse world matrix of Tisch at start time
+    // Last-run statistics
+    this.stats = null;
 
-        // ── Visualisation ──────────────────────────────────────────────────
-        this._pathMesh   = null;
-        this._liveMesh   = null;
-        this._livePoints = [];
-        this._liveScene  = null;
-        this._liveColor  = 0xff6600;
-        this.stats       = null;
-        this.path        = [];
+    // Legacy path array kept for visualizePath() backward compat
+    this.path = [];
 
-        console.log('🖨️  PrintingMotion ready.');
-        console.log(`   Bed: ${this.bedWidth}×${this.bedDepth}mm  |  placement: ${this.placement}`);
-        console.log(`   maxTravel: X=${xAxis.maxTravel} Y=${yAxis.maxTravel} Z=${zAxis.maxTravel}`);
+    console.log('PrintingMotion ready.');
+    console.log(`   Bed: ${this.bedWidth}×${this.bedDepth} mm  |  placement: ${this.placement}`);
+    console.log(`   maxTravel: X=${xAxis.maxTravel}  Y=${yAxis.maxTravel}  Z=${zAxis.maxTravel}`);
+  }
+
+  // ── Move list ───────────────────────────────────────────────────────────────
+
+  /**
+   * Loads a G-code-style move list, replacing any previous list.
+   *
+   * @param {Array<{ cmd: string, X?: number, Y?: number, Z?: number, F?: number }>} moveList
+   * @returns {this}  Chainable.
+   */
+  loadMoves(moveList) {
+    this.moves = moveList.map((m) => ({ ...m }));
+    this._syncLegacyPath();
+    console.log(`Loaded ${this.moves.length} moves.`);
+    return this;
+  }
+
+  /**
+   * Backward-compatible loader for raw `{ x, y, z, speed }` objects.
+   * Converts to G1 internally.
+   *
+   * @param {Array<{ x?: number, y?: number, z?: number, speed?: number }>} moves
+   * @returns {this}
+   */
+  loadCustomPath(moves) {
+    return this.loadMoves(
+      moves.map((m) => ({
+        cmd: 'G1',
+        X:   m.x     ?? 0,
+        Y:   m.y     ?? 0,
+        Z:   m.z     ?? 0,
+        F:   m.speed != null ? m.speed * 60 : this.currentF,
+      })),
+    );
+  }
+
+  // ── Execution ───────────────────────────────────────────────────────────────
+
+  /**
+   * Executes the loaded move list sequentially.
+   * Awaits each move's duration before proceeding to the next.
+   *
+   * @returns {Promise<void>}
+   */
+  async executePath() {
+    if (this.moves.length === 0) {
+      console.warn('executePath(): no moves loaded — call loadMoves() first.');
+      return;
+    }
+    if (this.isRunning) {
+      console.warn('executePath(): already running — call stop() first.');
+      return;
     }
 
-    // ─── Coordinate Mapping ───────────────────────────────────────────────────
+    this.isRunning  = true;
+    this._moveIndex = 0;
+    this._offsetX   = 0;
+    this._offsetY   = 0;
+    this._offsetZ   = 0;
 
-    /**
-     * Map G-code X mm (0 … bedWidth)  → axis position (0 … xAxis.maxTravel)
-     * Clamps to valid range automatically.
-     */
-    _mapX(gcodeX) {
-        const x = (gcodeX / this.bedWidth) * this.xAxis.maxTravel;
-        return Math.max(0, Math.min(x, this.xAxis.maxTravel));
-    }
+    // Clear previous filament and start fresh for this run
+    this._filamentRenderer?.reset();
 
-    _mapY(gcodeY) {
-        const y = (gcodeY / this.bedDepth) * this.yAxis.maxTravel;
-        return Math.max(0, Math.min(y, this.yAxis.maxTravel));
-    }
+    const startTime = Date.now();
+    let curX = 0, curY = 0, curZ = 0;
 
-    _mapZ(gcodeZ) {
-        const z = (gcodeZ / this.zAxis.maxTravel) * this.zAxis.maxTravel;
-        return Math.max(0, Math.min(z, this.zAxis.maxTravel));
-    }
+    console.log(`Executing ${this.moves.length} moves…`);
 
-    // ─── Move List Loading ────────────────────────────────────────────────────
+    for (let i = 0; i < this.moves.length; i++) {
+      if (!this.isRunning) break;
 
-    /**
-     * Load a G-code-style move list.
-     * Each entry: { cmd, X, Y, Z, F }
-     * cmd: 'G0' | 'G1' | 'G28' | 'G92'
-     *
-     * @param {Array<object>} moveList
-     * @returns {PrintingMotion} this — for chaining
-     */
-    loadMoves(moveList) {
-        this.moves = moveList.map(m => ({ ...m }));
-        // Keep legacy this.path in sync (for visualizePath)
-        this._syncLegacyPath();
-        console.log(`📂 Loaded ${this.moves.length} moves`);
-        return this;
-    }
+      this._moveIndex  = i;
+      const move       = this.moves[i];
+      const cmd        = (move.cmd ?? 'G1').toUpperCase();
 
-    /**
-     * Backward-compatible: accepts raw { x, y, z, speed } objects.
-     * Converts to G1 move list internally.
-     */
-    loadCustomPath(moves) {
-        const converted = moves.map(m => ({
-            cmd: 'G1',
-            X:   m.x     ?? 0,
-            Y:   m.y     ?? 0,
-            Z:   m.z     ?? 0,
-            F:   m.speed != null ? m.speed * 60 : this.currentF   // mm/s → mm/min
-        }));
-        return this.loadMoves(converted);
-    }
+      // ── G28: Home ─────────────────────────────────────────────────────────
+      if (cmd === 'G28') {
+        const homeX   = move.X !== undefined;
+        const homeY   = move.Y !== undefined;
+        const homeZ   = move.Z !== undefined;
+        const homeAll = !homeX && !homeY && !homeZ;
 
-    // ─── Path Generators (backward compatible) ────────────────────────────────
+        if (homeAll || homeX) { this.xAxis.moveToPosition(0, HOME_DURATION_MS); curX = 0; }
+        if (homeAll || homeY) { this.yAxis.moveToPosition(0, HOME_DURATION_MS); curY = 0; }
+        if (homeAll || homeZ) { this.zAxis.moveToPosition(0, HOME_DURATION_MS); curZ = 0; }
 
-    generateSquarePath(startX = 50, startY = 50, size = 20, layers = 1, speed = this.defaultSpeed) {
-        const F = speed * 60;
-        const moves = [];
+        await this._delay(HOME_DURATION_MS + HOME_SETTLE_MS);
 
-        for (let layer = 0; layer < layers; layer++) {
-            const z = layer * 0.2;
+        // Snap to exact home — eliminates rAF/setTimeout timing race
+        if (homeAll || homeX) this.xAxis.setPosition(0);
+        if (homeAll || homeY) this.yAxis.setPosition(0);
+        if (homeAll || homeZ) this.zAxis.setPosition(0);
 
-            if (layer > 0) {
-                moves.push({ cmd: 'G0', X: startX, Y: startY, Z: z + 1, F: F * 2 });
-            }
+        // Break filament line so home doesn't connect to next print segment
+        this._filamentRenderer?.appendBreak();
 
-            moves.push({ cmd: 'G1', X: startX,        Y: startY,        Z: z, F });
-            moves.push({ cmd: 'G1', X: startX + size, Y: startY,        Z: z, F });
-            moves.push({ cmd: 'G1', X: startX + size, Y: startY + size, Z: z, F });
-            moves.push({ cmd: 'G1', X: startX,        Y: startY + size, Z: z, F });
-            moves.push({ cmd: 'G1', X: startX,        Y: startY,        Z: z, F });
+        const axes = homeAll
+          ? 'all'
+          : [homeX && 'X', homeY && 'Y', homeZ && 'Z'].filter(Boolean).join('');
+        console.log(`G28 — homed ${axes}`);
+        continue;
+      }
+
+      // ── G92: Set virtual zero ──────────────────────────────────────────────
+      if (cmd === 'G92') {
+        if (move.X !== undefined) { this._offsetX = curX - move.X; curX = move.X; }
+        if (move.Y !== undefined) { this._offsetY = curY - move.Y; curY = move.Y; }
+        if (move.Z !== undefined) { this._offsetZ = curZ - move.Z; curZ = move.Z; }
+        continue;
+      }
+
+      // ── G0 / G1: Move ─────────────────────────────────────────────────────
+      if (cmd === 'G0' || cmd === 'G1') {
+        if (move.F !== undefined) this.currentF = move.F;
+
+        const targX = move.X !== undefined ? move.X : curX;
+        const targY = move.Y !== undefined ? move.Y : curY;
+        const targZ = move.Z !== undefined ? move.Z : curZ;
+
+        const adjX = targX + this._offsetX;
+        const adjY = targY + this._offsetY;
+        const adjZ = targZ + this._offsetZ;
+
+        const duration = this._moveDuration(
+          adjX - (curX + this._offsetX),
+          adjY - (curY + this._offsetY),
+          adjZ - (curZ + this._offsetZ),
+        );
+
+        this.xAxis.moveToPosition(this._mapX(adjX), duration);
+        this.yAxis.moveToPosition(this._mapY(adjY), duration);
+        this.zAxis.moveToPosition(this._mapZ(adjZ), duration);
+
+        await this._delay(duration);
+
+        // Snap to exact target position before reading nozzle world coords.
+        // animateToPosition uses rAF; _delay uses setTimeout.
+        // At high speedMultiplier, setTimeout fires before the final rAF tick —
+        // the nozzle matrix is one frame stale, placing filament at the wrong spot.
+        // setPosition() writes the exact transform instantly at no visual cost.
+        this.xAxis.setPosition(this._mapX(adjX));
+        this.yAxis.setPosition(this._mapY(adjY));
+        this.zAxis.setPosition(this._mapZ(adjZ));
+
+        if (this._filamentRenderer && cmd === 'G1') {
+          this._filamentRenderer.appendPoint(adjX, adjY, adjZ);
+        } else if (this._filamentRenderer && cmd === 'G0') {
+          // G0 travel — break the filament line so no connector is drawn
+          this._filamentRenderer.appendBreak();
         }
 
-        this.loadMoves(moves);
-        console.log(`📐 Square path: origin=(${startX},${startY}) size=${size}mm layers=${layers} moves=${moves.length}`);
-        return this;
+        curX = targX;
+        curY = targY;
+        curZ = targZ;
+        continue;
+      }
+
+      console.log(`Skipping unknown command: ${cmd}`);
     }
 
-    generateCirclePath(cx = 100, cy = 100, radius = 20, layers = 1, segments = 36, speed = this.defaultSpeed) {
-        const F = speed * 60;
-        const moves = [];
+    const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+    this.isRunning  = false;
+    this._moveIndex = 0;
+    this.stats      = { moves: this.moves.length, elapsedSeconds: parseFloat(elapsed) };
 
-        for (let layer = 0; layer < layers; layer++) {
-            const z = layer * 0.2;
+    console.log(`Done: ${this.moves.length} moves in ${elapsed}s`);
+  }
 
-            for (let i = 0; i <= segments; i++) {
-                const angle = (i / segments) * Math.PI * 2;
-                moves.push({
-                    cmd: 'G1',
-                    X: cx + Math.cos(angle) * radius,
-                    Y: cy + Math.sin(angle) * radius,
-                    Z: z,
-                    F
-                });
-            }
-        }
+  /** Stops the running print at the current move. */
+  stop() {
+    if (!this.isRunning) { console.log('stop(): not running.'); return; }
+    this.isRunning = false;
+    console.log(`Stopped at move ${this._moveIndex}.`);
+  }
 
-        this.loadMoves(moves);
-        console.log(`⭕ Circle path: centre=(${cx},${cy}) r=${radius}mm layers=${layers} moves=${moves.length}`);
-        return this;
+  // ── Live filament ───────────────────────────────────────────────────────────
+
+  /**
+   * Attaches a `FilamentRenderer` instance so live filament is drawn
+   * during `executePath()`.
+   *
+   * Call this BEFORE `executePath()`.
+   *
+   * @param {import('../../visualization/filament_renderer.js').FilamentRenderer} renderer
+   * @returns {this}
+   */
+  setFilamentRenderer(renderer) {
+    this._filamentRenderer = renderer;
+    return this;
+  }
+
+  /** Detaches and clears the filament renderer. */
+  clearFilamentRenderer() {
+    this._filamentRenderer?.clear();
+    this._filamentRenderer = null;
+  }
+
+  // ── Status ──────────────────────────────────────────────────────────────────
+
+  /**
+   * Returns a snapshot of the current printing state.
+   *
+   * @returns {object}
+   */
+  getStatus() {
+    return {
+      isRunning:     this.isRunning,
+      totalMoves:    this.moves.length,
+      currentMove:   this._moveIndex,
+      progress:      this.moves.length > 0
+        ? ((this._moveIndex / this.moves.length) * 100).toFixed(1) + '%'
+        : '0%',
+      feedrateMmMin: this.currentF,
+      positions: {
+        x: this.xAxis.getPosition(),
+        y: this.yAxis.getPosition(),
+        z: this.zAxis.getPosition(),
+      },
+      lastStats: this.stats,
+    };
+  }
+
+  /** Logs the current status to the console in a readable format. */
+  printStatus() {
+    const s = this.getStatus();
+    console.log('\n========== PRINTING STATUS ==========');
+    console.log(`   Running  : ${s.isRunning}`);
+    console.log(`   Progress : move ${s.currentMove} / ${s.totalMoves}  (${s.progress})`);
+    console.log(`   Feedrate : ${s.feedrateMmMin} mm/min  (${(s.feedrateMmMin / 60).toFixed(1)} mm/s)`);
+    console.log(`   Position : X=${s.positions.x.toFixed(2)}  Y=${s.positions.y.toFixed(2)}  Z=${s.positions.z.toFixed(2)}`);
+    if (s.lastStats) {
+      console.log(`   Last run : ${s.lastStats.moves} moves in ${s.lastStats.elapsedSeconds}s`);
     }
+    console.log('=====================================\n');
+  }
 
-    // ─── Execution ────────────────────────────────────────────────────────────
+  // ── Coordinate mapping ──────────────────────────────────────────────────────
 
-    /**
-     * Execute the loaded move list.
-     * Processes G0, G1, G28, G92 commands in order.
-     */
-    async executePath() {
-        if (this.moves.length === 0) {
-            console.warn('⚠️  No moves loaded. Call loadMoves() or a generator first.');
-            return;
-        }
-        if (this.isRunning) {
-            console.warn('⚠️  Already running. Call stop() first.');
-            return;
-        }
+  /**
+   * Maps G-code X mm [0 … bedWidth] → axis position [0 … xAxis.maxTravel].
+   * @param {number} gcodeX
+   * @returns {number}
+   */
+  _mapX(gcodeX) {
+    return Math.max(0, Math.min(
+      (gcodeX / this.bedWidth) * this.xAxis.maxTravel,
+      this.xAxis.maxTravel,
+    ));
+  }
 
-        this.isRunning   = true;
-        this._moveIndex  = 0;
-        this._offsetX    = 0;
-        this._offsetY    = 0;
-        this._offsetZ    = 0;
+  /**
+   * Maps G-code Y mm [0 … bedDepth] → axis position [0 … yAxis.maxTravel].
+   * @param {number} gcodeY
+   * @returns {number}
+   */
+  _mapY(gcodeY) {
+    return Math.max(0, Math.min(
+      (gcodeY / this.bedDepth) * this.yAxis.maxTravel,
+      this.yAxis.maxTravel,
+    ));
+  }
 
-        const startTime = Date.now();
-        console.log(`▶️  Executing ${this.moves.length} moves…`);
+  /**
+   * Maps G-code Z mm [0 … zAxis.maxTravel] → axis position [0 … zAxis.maxTravel].
+   *
+   * Bug fix: the original divided by `zAxis.maxTravel` then multiplied by
+   * `zAxis.maxTravel`, which is a no-op identity. The map now mirrors X and Y.
+   *
+   * @param {number} gcodeZ
+   * @returns {number}
+   */
+  _mapZ(gcodeZ) {
+    return Math.max(0, Math.min(
+      (gcodeZ / this.zAxis.maxTravel) * this.zAxis.maxTravel,
+      this.zAxis.maxTravel,
+    ));
+  }
 
-        // Track current logical position (in G-code mm, before mapping)
-        let curX = 0, curY = 0, curZ = 0;
+  // ── Private helpers ─────────────────────────────────────────────────────────
 
-        for (let i = 0; i < this.moves.length; i++) {
-            if (!this.isRunning) break;
+  /**
+   * Calculates the move duration in ms from a 3D displacement vector and the
+   * current feedrate, scaled by `speedMultiplier`.
+   *
+   * Returns at least `MIN_MOVE_DURATION_MS` to prevent zero-duration frames.
+   *
+   * @param {number} dx
+   * @param {number} dy
+   * @param {number} dz
+   * @returns {number} Duration in ms.
+   */
+  _moveDuration(dx, dy, dz) {
+    const dist     = Math.sqrt(dx * dx + dy * dy + dz * dz);
+    const speedMmS = (this.currentF / 60) * this.speedMultiplier;
+    return Math.max(MIN_MOVE_DURATION_MS, (dist / speedMmS) * 1000);
+  }
 
-            this._moveIndex = i;
-            const move = this.moves[i];
-            const cmd  = (move.cmd || 'G1').toUpperCase();
+  /**
+   * Keeps the legacy `this.path` array in sync with the move list so that
+   * any existing `visualizePath()` calls continue to work unchanged.
+   */
+  _syncLegacyPath() {
+    this.path = this.moves
+      .filter((m) => m.cmd === 'G0' || m.cmd === 'G1')
+      .map((m) => ({ x: m.X ?? 0, y: m.Y ?? 0, z: m.Z ?? 0 }));
+  }
 
-            // ── G28: Home ──────────────────────────────────────────────────
-            if (cmd === 'G28') {
-                const homeX = move.X !== undefined;
-                const homeY = move.Y !== undefined;
-                const homeZ = move.Z !== undefined;
-                const homeAll = !homeX && !homeY && !homeZ;
-
-                const dur = 800;
-                if (homeAll || homeX) { this.xAxis.moveToPosition(0, dur); curX = 0; }
-                if (homeAll || homeY) { this.yAxis.moveToPosition(0, dur); curY = 0; }
-                if (homeAll || homeZ) { this.zAxis.moveToPosition(0, dur); curZ = 0; }
-
-                await this._delay(dur + 100);
-                console.log(`🏠 G28 — homed ${homeAll ? 'all' : [homeX&&'X', homeY&&'Y', homeZ&&'Z'].filter(Boolean).join('')}`);
-                continue;
-            }
-
-            // ── G92: Set position (offset reset) ──────────────────────────
-            if (cmd === 'G92') {
-                // G92 X0 means "current position IS X=0" — store as offset
-                if (move.X !== undefined) { this._offsetX = curX - move.X; curX = move.X; }
-                if (move.Y !== undefined) { this._offsetY = curY - move.Y; curY = move.Y; }
-                if (move.Z !== undefined) { this._offsetZ = curZ - move.Z; curZ = move.Z; }
-                console.log(`📌 G92 — offsets: X=${this._offsetX.toFixed(2)} Y=${this._offsetY.toFixed(2)} Z=${this._offsetZ.toFixed(2)}`);
-                continue;
-            }
-
-            // ── G0 / G1: Move ─────────────────────────────────────────────
-            if (cmd === 'G0' || cmd === 'G1') {
-                // Update feedrate if provided (F persists)
-                if (move.F !== undefined) this.currentF = move.F;
-
-                // Target in G-code mm (use current if axis not specified)
-                const targX = (move.X !== undefined ? move.X : curX);
-                const targY = (move.Y !== undefined ? move.Y : curY);
-                const targZ = (move.Z !== undefined ? move.Z : curZ);
-
-                // Apply G92 offsets
-                const adjX = targX + this._offsetX;
-                const adjY = targY + this._offsetY;
-                const adjZ = targZ + this._offsetZ;
-
-                // Map G-code mm → axis positions
-                const axisX = this._mapX(adjX);
-                const axisY = this._mapY(adjY);
-                const axisZ = this._mapZ(adjZ);
-
-                // Duration from feedrate (mm/min → mm/s → ms), scaled by speedMultiplier
-                const speedMmS = (this.currentF / 60) * this.speedMultiplier;
-                const dx = adjX - (curX + this._offsetX);
-                const dy = adjY - (curY + this._offsetY);
-                const dz = adjZ - (curZ + this._offsetZ);
-                const dist = Math.sqrt(dx*dx + dy*dy + dz*dz);
-                const duration = Math.max(16, (dist / speedMmS) * 1000);
-
-                // Execute
-                this.xAxis.moveToPosition(axisX, duration);
-                this.yAxis.moveToPosition(axisY, duration);
-                this.zAxis.moveToPosition(axisZ, duration);
-
-                await this._delay(duration);
-
-                // ── Live filament: append point after move completes ──────
-                if (this._liveScene) {
-                    this._appendLivePoint(adjX, adjY, adjZ, cmd === 'G1');
-                }
-
-                curX = targX;
-                curY = targY;
-                curZ = targZ;
-                continue;
-            }
-
-            // Unknown command — skip silently
-            console.log(`⏭️  Skipping unknown command: ${cmd}`);
-        }
-
-        const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-        this.isRunning  = false;
-        this._moveIndex = 0;
-
-        this.stats = { moves: this.moves.length, elapsedSeconds: parseFloat(elapsed) };
-        console.log(`✅ Done: ${this.moves.length} moves in ${elapsed}s`);
-    }
-
-    stop() {
-        if (!this.isRunning) { console.log('ℹ️  Not running.'); return; }
-        this.isRunning = false;
-        console.log('⏹️  Stopped at move', this._moveIndex);
-    }
-
-    // ─── Live Filament Visualisation ─────────────────────────────────────────
-
-    /**
-     * Call this BEFORE executePath() to enable live filament drawing.
-     * The filament line grows move by move as the print executes.
-     *
-     * @param {THREE.Scene} scene
-     * @param {number} scale   mm → scene units (default 0.1, matching modelScale=10)
-     * @param {number} color   filament color hex (default orange 0xff6600)
-     */
-    /**
-     * Call BEFORE executePath() to enable live filament drawing.
-     *
-     * ── Core principle ───────────────────────────────────────────────────────
-     * Instead of computing where the filament should be from G-code mm,
-     * we read the ACTUAL NOZZLE WORLD POSITION at each deposit moment.
-     * This guarantees perfect sync — no coordinate math, no offsets to guess.
-     *
-     * The point is then projected onto the bed top surface (constant Y),
-     * converted to Tisch LOCAL space, and stored there so it rides with the bed.
-     */
-    startLiveVisualization(scene, color = 0xff6600) {
-        this._liveScene  = scene;
-        this._liveColor  = color;
-        this._livePoints = [];
-        this._clearLiveMesh();
-
-        // Find Tisch and Druckkopf (nozzle)
-        this._tischNode  = null;
-        this._nozzleNode = null;
-        scene.traverse(c => {
-            if (c.name === 'Tisch')     this._tischNode  = c;
-            if (c.name === 'Druckkopf') this._nozzleNode = c;
-        });
-
-        if (!this._tischNode) {
-            console.warn('⚠️  Tisch not found — live filament disabled');
-            return;
-        }
-        if (!this._nozzleNode) {
-            console.warn('⚠️  Druckkopf not found — filament will use bed center');
-        }
-
-        // Measure bed top Y (constant — bed only moves in Z)
-        this._tischNode.updateWorldMatrix(true, true);
-        const box = new THREE.Box3().setFromObject(this._tischNode);
-        this._bedTopY = box.max.y;
-
-        console.log(`🎨 Live filament ready — nozzle tracking enabled`);
-        console.log(`   Bed top Y: ${this._bedTopY.toFixed(4)}`);
-        return this;
-    }
-
-    /**
-     * Append one deposit point — G1 only.
-     *
-     * Reads the CURRENT nozzle world X and Z directly from Druckkopf bounding box.
-     * Projects onto bed surface (bedTopY).
-     * Converts to Tisch local space so it moves with the bed.
-     *
-     * gcodeZ is only used for layer height offset above bed surface.
-     */
-    _appendLivePoint(gcodeX, gcodeY, gcodeZ, isPrint) {
-        if (!this._liveScene || !isPrint) return;
-        if (!this._tischNode) return;
-
-        // ── Read nozzle world position directly ───────────────────────────
-        let worldX, worldZ;
-
-        if (this._nozzleNode) {
-            this._nozzleNode.updateWorldMatrix(true, true);
-            const nb = new THREE.Box3().setFromObject(this._nozzleNode);
-            worldX = (nb.min.x + nb.max.x) / 2;  // nozzle center X
-            worldZ = (nb.min.z + nb.max.z) / 2;  // nozzle center Z
-        } else {
-            // Fallback: use bed center
-            this._tischNode.updateWorldMatrix(true, true);
-            const tb = new THREE.Box3().setFromObject(this._tischNode);
-            worldX = (tb.min.x + tb.max.x) / 2;
-            worldZ = (tb.min.z + tb.max.z) / 2;
-        }
-
-        // Y = read directly from nozzle world position
-        // This is always correct regardless of Z layer height or gantry movement
-        let worldY = this._bedTopY; // fallback
-        if (this._nozzleNode) {
-            this._nozzleNode.updateWorldMatrix(true, true);
-            const nbb = new THREE.Box3().setFromObject(this._nozzleNode);
-            worldY = nbb.min.y; // bottom tip of nozzle = deposit height
-        }
-
-        // ── Convert world → Tisch LOCAL space ────────────────────────────
-        // Fresh inverse every time — Tisch moves so the matrix changes
-        const invMat = new THREE.Matrix4().copy(this._tischNode.matrixWorld).invert();
-        const local  = new THREE.Vector3(worldX, worldY, worldZ).applyMatrix4(invMat);
-
-        this._livePoints.push({ x: local.x, y: local.y, z: local.z });
-        this._rebuildLiveMesh();
-    }
-
-    _rebuildLiveMesh() {
-        const pts = this._livePoints;
-        if (pts.length < 2) return;
-
-        this._clearLiveMesh();
-
-        const positions = new Float32Array(pts.length * 3);
-        pts.forEach((pt, i) => {
-            positions[i * 3 + 0] = pt.x;
-            positions[i * 3 + 1] = pt.y;
-            positions[i * 3 + 2] = pt.z;
-        });
-
-        const geometry = new THREE.BufferGeometry();
-        geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-
-        // All points are G1 extrusion — single color, no vertex colors needed
-        const material = new THREE.LineBasicMaterial({ color: this._liveColor, linewidth: 2 });
-        this._liveMesh = new THREE.Line(geometry, material);
-
-        // Parent to Tisch — moves with the bed automatically
-        const parent = this._tischNode || this._liveScene;
-        parent.add(this._liveMesh);
-    }
-
-    _clearLiveMesh() {
-        if (this._liveMesh) {
-            // Remove from wherever it was parented (Tisch or scene)
-            if (this._liveMesh.parent) {
-                this._liveMesh.parent.remove(this._liveMesh);
-            }
-            this._liveMesh.geometry.dispose();
-            this._liveMesh.material.dispose();
-            this._liveMesh = null;
-        }
-    }
-
-    clearLiveVisualization() {
-        this._clearLiveMesh();
-        this._livePoints = [];
-        this._liveScene  = null;
-        console.log('🗑️  Live filament cleared.');
-    }
-
-    // ─── Legacy: show the planned path before printing ────────────────────────
-
-    visualizePath(scene, mmToScene = 0.1, color = 0x00ff88) {
-        if (!scene) { console.warn('⚠️  Pass scene as first argument.'); return; }
-        if (this.path.length < 2) { console.warn('⚠️  Need at least 2 points.'); return; }
-
-        import('three').then(({ BufferGeometry, BufferAttribute, LineBasicMaterial, Line }) => {
-            if (this._pathMesh) {
-                scene.remove(this._pathMesh);
-                this._pathMesh.geometry.dispose();
-                this._pathMesh = null;
-            }
-
-            const positions = new Float32Array(this.path.length * 3);
-            this.path.forEach((pt, i) => {
-                positions[i * 3 + 0] = pt.x * mmToScene;
-                positions[i * 3 + 1] = pt.z * mmToScene;
-                positions[i * 3 + 2] = pt.y * mmToScene;
-            });
-
-            const geometry = new BufferGeometry();
-            geometry.setAttribute('position', new BufferAttribute(positions, 3));
-            this._pathMesh = new Line(geometry, new LineBasicMaterial({ color, linewidth: 2 }));
-            scene.add(this._pathMesh);
-
-            console.log(`🎨 Planned path visualised (${this.path.length} points)`);
-        });
-
-        return this;
-    }
-
-    clearVisualization(scene) {
-        if (this._pathMesh && scene) {
-            scene.remove(this._pathMesh);
-            this._pathMesh.geometry.dispose();
-            this._pathMesh = null;
-            console.log('🗑️  Planned path cleared.');
-        }
-    }
-
-    // ─── Status ───────────────────────────────────────────────────────────────
-
-    getStatus() {
-        return {
-            isRunning:   this.isRunning,
-            totalMoves:  this.moves.length,
-            currentMove: this._moveIndex,
-            progress:    this.moves.length > 0
-                            ? ((this._moveIndex / this.moves.length) * 100).toFixed(1) + '%'
-                            : '0%',
-            feedrateMmMin: this.currentF,
-            positions: {
-                x: this.xAxis.getPosition(),
-                y: this.yAxis.getPosition(),
-                z: this.zAxis.getPosition()
-            },
-            lastStats: this.stats
-        };
-    }
-
-    printStatus() {
-        const s = this.getStatus();
-        console.log('\n========== PRINTING STATUS ==========');
-        console.log(`▶️  Running:    ${s.isRunning}`);
-        console.log(`📍 Progress:   move ${s.currentMove} / ${s.totalMoves}  (${s.progress})`);
-        console.log(`⚡ Feedrate:   ${s.feedrateMmMin} mm/min  (${(s.feedrateMmMin/60).toFixed(1)} mm/s)`);
-        console.log(`📐 Position:   X=${s.positions.x.toFixed(2)}  Y=${s.positions.y.toFixed(2)}  Z=${s.positions.z.toFixed(2)}`);
-        if (s.lastStats) console.log(`✅ Last run:   ${s.lastStats.moves} moves in ${s.lastStats.elapsedSeconds}s`);
-        console.log('=====================================\n');
-    }
-
-    // ─── Private Helpers ──────────────────────────────────────────────────────
-
-    /**
-     * Keep the legacy this.path[] array in sync with the move list
-     * so visualizePath() still works without changes.
-     */
-    _syncLegacyPath() {
-        this.path = this.moves
-            .filter(m => m.cmd === 'G0' || m.cmd === 'G1')
-            .map(m => ({
-                x: m.X ?? 0,
-                y: m.Y ?? 0,
-                z: m.Z ?? 0
-            }));
-    }
-
-    // kept for backward compat (generateSquarePath etc used this before)
-    _addMove(x, y, z, speed) {
-        this.moves.push({ cmd: 'G1', X: x, Y: y, Z: z, F: (speed ?? this.defaultSpeed) * 60 });
-        this.path.push({ x, y, z });
-    }
-
-    _delay(ms) {
-        return new Promise(resolve => setTimeout(resolve, ms));
-    }
-
-    async _homeAll() {
-        const dur = 800;
-        this.xAxis.moveToPosition(0, dur);
-        this.yAxis.moveToPosition(0, dur);
-        this.zAxis.moveToPosition(0, dur);
-        await this._delay(dur + 100);
-        console.log('🏠 All axes homed.');
-    }
+  /**
+   * @param {number} ms
+   * @returns {Promise<void>}
+   */
+  _delay(ms) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
 }

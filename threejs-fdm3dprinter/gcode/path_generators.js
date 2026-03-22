@@ -1,0 +1,188 @@
+/**
+ * @file path_generators.js
+ * @description Pure functions that build G-code-style move lists for common
+ * print shapes.
+ *
+ * Where these came from
+ * ─────────────────────
+ *  `generateSquarePath()` and `generateCirclePath()` were instance methods
+ *  on `PrintingMotion`. They had no dependency on `this` state beyond
+ *  calling `this.loadMoves()` at the end — making them methods was a
+ *  violation of SRP and made them impossible to test or reuse without
+ *  constructing a full `PrintingMotion` instance.
+ *
+ *  `tower()` was a method on `PrintingExamples` (dev-only) despite being a
+ *  pure geometric computation with no dev-tool concerns.
+ *
+ *  All three are now stateless functions on a `PathGenerators` namespace
+ *  object. They return a plain move-list array — callers pass that to
+ *  `printer.loadMoves()` themselves.
+ *
+ * Usage
+ * ─────
+ *  import { PathGenerators } from '../gcode/path_generators.js';
+ *
+ *  const moves = PathGenerators.square(50, 50, 100, 3);
+ *  printer.loadMoves(moves).executePath();
+ *
+ *  const moves = PathGenerators.tower(150, 150, 40, 10);
+ *  printer.loadMoves(moves).executePath();
+ *
+ * @module gcode/path_generators
+ */
+
+import { PRINTER_CONFIG } from '../config/printer_config.js';
+
+const { DEFAULT_SPEED_MM_S, DEFAULT_LAYER_HEIGHT_MM } = PRINTER_CONFIG.PRINTING;
+
+export const PathGenerators = Object.freeze({
+
+  // ── Square ──────────────────────────────────────────────────────────────────
+
+  /**
+   * Generates a closed square perimeter, repeated for each layer.
+   *
+   * @param {number} [startX=50]       X coordinate of the bottom-left corner, mm.
+   * @param {number} [startY=50]       Y coordinate of the bottom-left corner, mm.
+   * @param {number} [size=20]         Side length, mm.
+   * @param {number} [layers=1]        Number of layers to print.
+   * @param {number} [speed]           Print speed, mm/s. Defaults to config value.
+   * @returns {Array<object>}          Move list for `PrintingMotion.loadMoves()`.
+   */
+  square(
+    startX  = 50,
+    startY  = 50,
+    size    = 20,
+    layers  = 1,
+    speed   = DEFAULT_SPEED_MM_S,
+  ) {
+    const F     = speed * 60;
+    const moves = [];
+
+    for (let layer = 0; layer < layers; layer++) {
+      const z = layer * DEFAULT_LAYER_HEIGHT_MM;
+
+      // Lift and travel to start corner on layers after the first
+      if (layer > 0) {
+        moves.push({ cmd: 'G0', X: startX, Y: startY, Z: z + 1, F: F * 2 });
+      }
+
+      // Print one closed square
+      moves.push({ cmd: 'G1', X: startX,        Y: startY,        Z: z, F });
+      moves.push({ cmd: 'G1', X: startX + size,  Y: startY,        Z: z, F });
+      moves.push({ cmd: 'G1', X: startX + size,  Y: startY + size, Z: z, F });
+      moves.push({ cmd: 'G1', X: startX,         Y: startY + size, Z: z, F });
+      moves.push({ cmd: 'G1', X: startX,         Y: startY,        Z: z, F });
+    }
+
+    console.log(
+      `Square path: origin=(${startX},${startY})  size=${size} mm  ` +
+      `layers=${layers}  moves=${moves.length}`,
+    );
+    return moves;
+  },
+
+  // ── Circle ──────────────────────────────────────────────────────────────────
+
+  /**
+   * Generates a circular perimeter approximated by straight segments,
+   * repeated for each layer.
+   *
+   * @param {number} [cx=100]          Centre X, mm.
+   * @param {number} [cy=100]          Centre Y, mm.
+   * @param {number} [radius=20]       Radius, mm.
+   * @param {number} [layers=1]        Number of layers.
+   * @param {number} [segments=36]     Number of straight segments per circle.
+   * @param {number} [speed]           Print speed, mm/s.
+   * @returns {Array<object>}
+   */
+  circle(
+    cx       = 100,
+    cy       = 100,
+    radius   = 20,
+    layers   = 1,
+    segments = 36,
+    speed    = DEFAULT_SPEED_MM_S,
+  ) {
+    const F     = speed * 60;
+    const moves = [];
+
+    for (let layer = 0; layer < layers; layer++) {
+      const z = layer * DEFAULT_LAYER_HEIGHT_MM;
+
+      for (let i = 0; i <= segments; i++) {
+        const angle = (i / segments) * Math.PI * 2;
+        moves.push({
+          cmd: 'G1',
+          X:   cx + Math.cos(angle) * radius,
+          Y:   cy + Math.sin(angle) * radius,
+          Z:   z,
+          F,
+        });
+      }
+    }
+
+    console.log(
+      `Circle path: centre=(${cx},${cy})  r=${radius} mm  ` +
+      `layers=${layers}  moves=${moves.length}`,
+    );
+    return moves;
+  },
+
+  // ── Calibration tower ───────────────────────────────────────────────────────
+
+  /**
+   * Generates a hollow square tower — one perimeter per layer, growing in Z.
+   *
+   * Use this to verify all three axes are working correctly:
+   *   Walls stay aligned layer-to-layer  → X and Y are correct
+   *   Each layer sits above the previous → Z is correct
+   *   Square is square (not rectangular) → X and Y scales match
+   *
+   * @param {number} [cx=150]          Centre X, mm.
+   * @param {number} [cy=150]          Centre Y, mm.
+   * @param {number} [size=40]         Wall side length, mm.
+   * @param {number} [layers=10]       Number of layers.
+   * @param {number} [layerHeight]     Layer height, mm. Defaults to config value.
+   * @param {number} [speed=40]        Print speed, mm/s.
+   * @returns {Array<object>}
+   */
+  tower(
+    cx          = 150,
+    cy          = 150,
+    size        = 40,
+    layers      = 10,
+    layerHeight = DEFAULT_LAYER_HEIGHT_MM,
+    speed       = 40,
+  ) {
+    const half  = size / 2;
+    const F     = speed * 60;
+    const moves = [];
+
+    // Home and lift before starting
+    moves.push({ cmd: 'G28' });
+    moves.push({ cmd: 'G0', X: cx, Y: cy, Z: 5, F: F * 2 });
+
+    for (let layer = 0; layer < layers; layer++) {
+      const z = (layer + 1) * layerHeight;
+
+      // Travel to bottom-left corner at layer height
+      moves.push({ cmd: 'G0', X: cx - half, Y: cy - half, Z: z, F: F * 2 });
+
+      // Print one perimeter
+      moves.push({ cmd: 'G1', X: cx + half, Y: cy - half, Z: z, F });
+      moves.push({ cmd: 'G1', X: cx + half, Y: cy + half, Z: z, F });
+      moves.push({ cmd: 'G1', X: cx - half, Y: cy + half, Z: z, F });
+      moves.push({ cmd: 'G1', X: cx - half, Y: cy - half, Z: z, F });
+    }
+
+    moves.push({ cmd: 'G28' });
+
+    console.log(
+      `Tower: centre=(${cx},${cy})  size=${size} mm  layers=${layers}  ` +
+      `height=${(layers * layerHeight).toFixed(2)} mm  moves=${moves.length}`,
+    );
+    return moves;
+  },
+
+});
