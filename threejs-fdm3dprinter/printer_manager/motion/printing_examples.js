@@ -167,8 +167,25 @@ G28
     // ─── Utilities ────────────────────────────────────────────────────────────
 
     status() { this._printer.printStatus(); }
+    dims()   { return this._printer.getDimensions(); }
     stop()   { this._printer.stop(); }
     clear()  { this._printer.clearLiveVisualization(); }
+
+    /**
+     * Set speed multiplier for testing.
+     * 1 = real speed, 2 = 2× faster, 5 = 5×, 10 = 10×
+     * Call before starting a print.
+     *   examples.speed(5)
+     *   examples.tower()
+     */
+    speed(multiplier = 1) {
+        if (typeof multiplier !== 'number' || multiplier <= 0) {
+            console.warn('speed: pass a positive number, e.g. examples.speed(5)');
+            return;
+        }
+        this._printer.speedMultiplier = multiplier;
+        console.log(`⚡ Speed multiplier set to ${multiplier}×`);
+    }
 
     /**
      * Switch placement mode and log current setting.

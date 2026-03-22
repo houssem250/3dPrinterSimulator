@@ -64,6 +64,10 @@ export class PrintingMotion {
         // 'center' = G-code 0,0 at bed center (some slicers use this)
         this.placement = options.placement ?? 'corner';
 
+        // ── Speed multiplier ───────────────────────────────────────────────
+        // 1 = real speed, 2 = 2x faster, 10 = 10x faster (for testing)
+        this.speedMultiplier = options.speedMultiplier ?? 1;
+
         // ── Internal move list ─────────────────────────────────────────────
         this.moves      = [];
         this._moveIndex = 0;
@@ -286,13 +290,13 @@ export class PrintingMotion {
                 const axisY = this._mapY(adjY);
                 const axisZ = this._mapZ(adjZ);
 
-                // Duration from feedrate (mm/min → mm/s → ms)
-                const speedMmS = this.currentF / 60;
+                // Duration from feedrate (mm/min → mm/s → ms), scaled by speedMultiplier
+                const speedMmS = (this.currentF / 60) * this.speedMultiplier;
                 const dx = adjX - (curX + this._offsetX);
                 const dy = adjY - (curY + this._offsetY);
                 const dz = adjZ - (curZ + this._offsetZ);
                 const dist = Math.sqrt(dx*dx + dy*dy + dz*dz);
-                const duration = Math.max(50, (dist / speedMmS) * 1000);
+                const duration = Math.max(16, (dist / speedMmS) * 1000);
 
                 // Execute
                 this.xAxis.moveToPosition(axisX, duration);
@@ -412,12 +416,14 @@ export class PrintingMotion {
             worldZ = (tb.min.z + tb.max.z) / 2;
         }
 
-        // Y = bed top surface + tiny layer offset per G-code Z mm
-        // scenePerMm estimated from bed width / bedWidth
-        this._tischNode.updateWorldMatrix(true, true);
-        const tb = new THREE.Box3().setFromObject(this._tischNode);
-        const scenePerMm = (tb.max.x - tb.min.x) / this.bedWidth;
-        const worldY = this._bedTopY + gcodeZ * scenePerMm * 0.1;
+        // Y = read directly from nozzle world position
+        // This is always correct regardless of Z layer height or gantry movement
+        let worldY = this._bedTopY; // fallback
+        if (this._nozzleNode) {
+            this._nozzleNode.updateWorldMatrix(true, true);
+            const nbb = new THREE.Box3().setFromObject(this._nozzleNode);
+            worldY = nbb.min.y; // bottom tip of nozzle = deposit height
+        }
 
         // ── Convert world → Tisch LOCAL space ────────────────────────────
         // Fresh inverse every time — Tisch moves so the matrix changes

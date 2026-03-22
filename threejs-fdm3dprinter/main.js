@@ -137,7 +137,10 @@ modelLoader.loadModel('models/3dprinter.glb', (loadedModel) => {
   window.modelLoader = modelLoader;
 
   // 🖨️ Initialize Printing Simulation
-  printer = new PrintingMotion(xAxisMotion, yAxisMotion, zAxisMotion, { placement: 'center' });
+  printer = new PrintingMotion(xAxisMotion, yAxisMotion, zAxisMotion, {
+    placement: 'center',
+    speedMultiplier: 1
+  });
   window.printer = printer;
   
   console.log('\n🖨️ PRINTING SIMULATION READY!');
