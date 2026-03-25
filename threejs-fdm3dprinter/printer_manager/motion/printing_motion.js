@@ -74,18 +74,18 @@ export class PrintingMotion {
     this.yAxis = yAxis;
     this.zAxis = zAxis;
 
-    this.placement       = options.placement       ?? DEFAULT_PLACEMENT;
+    this.placement = options.placement ?? DEFAULT_PLACEMENT;
     this.speedMultiplier = options.speedMultiplier ?? DEFAULT_SPEED_MULTIPLIER;
 
     this.bedWidth = options.bedDimensions?.width ?? xAxis.maxTravel;
     this.bedDepth = options.bedDimensions?.depth ?? yAxis.maxTravel;
 
     /** @type {Array<object>} */
-    this.moves      = [];
+    this.moves = [];
     this._moveIndex = 0;
 
     this.isRunning = false;
-    this.currentF  = DEFAULT_FEEDRATE_MM_MIN;
+    this.currentF = DEFAULT_FEEDRATE_MM_MIN;
 
     // G92 virtual-zero offsets
     this._offsetX = 0;
@@ -132,10 +132,10 @@ export class PrintingMotion {
     return this.loadMoves(
       moves.map((m) => ({
         cmd: 'G1',
-        X:   m.x     ?? 0,
-        Y:   m.y     ?? 0,
-        Z:   m.z     ?? 0,
-        F:   m.speed != null ? m.speed * 60 : this.currentF,
+        X: m.x ?? 0,
+        Y: m.y ?? 0,
+        Z: m.z ?? 0,
+        F: m.speed != null ? m.speed * 60 : this.currentF,
       })),
     );
   }
@@ -158,11 +158,15 @@ export class PrintingMotion {
       return;
     }
 
-    this.isRunning  = true;
+    this.isRunning = true;
     this._moveIndex = 0;
-    this._offsetX   = 0;
-    this._offsetY   = 0;
-    this._offsetZ   = 0;
+    this._offsetX = 0;
+    this._offsetY = 0;
+    this._offsetZ = 0;
+
+    // added
+    this._moveIndex = 0;
+    this._lastE = undefined;
 
     // Clear previous filament and start fresh for this run
     this._filamentRenderer?.reset();
@@ -173,17 +177,30 @@ export class PrintingMotion {
     console.log(`Executing ${this.moves.length} moves…`);
 
     for (let i = 0; i < this.moves.length; i++) {
-      if (!this.isRunning) break;
+      if (!this.isRunning) {
+        console.log(`Execution halted at move ${this._moveIndex}`);
+        break;
+      }
 
-      this._moveIndex  = i;
-      const move       = this.moves[i];
-      const cmd        = (move.cmd ?? 'G1').toUpperCase();
+      const move = this.moves[i];
+      const cmd = (move.cmd ?? 'G1').toUpperCase();
+
+      //  Handle the dynamic width/height overrides
+      if (cmd === 'SET_HEIGHT') {
+        this._filamentRenderer?.setHeight(move.value);
+        continue; // Skip the rest of the loop (no motor movement)
+      }
+
+      if (cmd === 'SET_WIDTH') {
+        this._filamentRenderer?.setWidth(move.value);
+        continue; // Skip the rest of the loop (no motor movement)
+      }
 
       // ── G28: Home ─────────────────────────────────────────────────────────
       if (cmd === 'G28') {
-        const homeX   = move.X !== undefined;
-        const homeY   = move.Y !== undefined;
-        const homeZ   = move.Z !== undefined;
+        const homeX = move.X !== undefined;
+        const homeY = move.Y !== undefined;
+        const homeZ = move.Z !== undefined;
         const homeAll = !homeX && !homeY && !homeZ;
 
         if (homeAll || homeX) { this.xAxis.moveToPosition(0, HOME_DURATION_MS); curX = 0; }
@@ -192,12 +209,10 @@ export class PrintingMotion {
 
         await this._delay(HOME_DURATION_MS + HOME_SETTLE_MS);
 
-        // Snap to exact home — eliminates rAF/setTimeout timing race
         if (homeAll || homeX) this.xAxis.setPosition(0);
         if (homeAll || homeY) this.yAxis.setPosition(0);
         if (homeAll || homeZ) this.zAxis.setPosition(0);
 
-        // Break filament line so home doesn't connect to next print segment
         this._filamentRenderer?.appendBreak();
 
         const axes = homeAll
@@ -212,6 +227,11 @@ export class PrintingMotion {
         if (move.X !== undefined) { this._offsetX = curX - move.X; curX = move.X; }
         if (move.Y !== undefined) { this._offsetY = curY - move.Y; curY = move.Y; }
         if (move.Z !== undefined) { this._offsetZ = curZ - move.Z; curZ = move.Z; }
+
+        //  Use move.E, not params.E
+        if (move.E !== undefined) {
+          this._lastE = move.E;
+        }
         continue;
       }
 
@@ -239,20 +259,33 @@ export class PrintingMotion {
 
         await this._delay(duration);
 
-        // Snap to exact target position before reading nozzle world coords.
-        // animateToPosition uses rAF; _delay uses setTimeout.
-        // At high speedMultiplier, setTimeout fires before the final rAF tick —
-        // the nozzle matrix is one frame stale, placing filament at the wrong spot.
-        // setPosition() writes the exact transform instantly at no visual cost.
         this.xAxis.setPosition(this._mapX(adjX));
         this.yAxis.setPosition(this._mapY(adjY));
         this.zAxis.setPosition(this._mapZ(adjZ));
 
-        if (this._filamentRenderer && cmd === 'G1') {
-          this._filamentRenderer.appendPoint(adjX, adjY, adjZ);
-        } else if (this._filamentRenderer && cmd === 'G0') {
-          // G0 travel — break the filament line so no connector is drawn
-          this._filamentRenderer.appendBreak();
+        if (this._filamentRenderer) {
+          //  Use move.E
+          const hasE = move.E !== undefined;
+          const isSmartFile = this._lastE !== undefined;
+          let isPrinting = false;
+
+          if (isSmartFile) {
+            //  Compare move.E against this._lastE
+            isPrinting = (cmd === 'G1') && hasE && (move.E > this._lastE);
+          } else {
+            isPrinting = (cmd === 'G1');
+          }
+
+          if (isPrinting) {
+            this._filamentRenderer.appendPoint(adjX, adjY, adjZ);
+          } else {
+            this._filamentRenderer.appendBreak();
+          }
+        }
+
+        //  Finally, update the tracker using move.E
+        if (move.E !== undefined) {
+          this._lastE = move.E;
         }
 
         curX = targX;
@@ -265,9 +298,9 @@ export class PrintingMotion {
     }
 
     const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-    this.isRunning  = false;
+    this.isRunning = false;
     this._moveIndex = 0;
-    this.stats      = { moves: this.moves.length, elapsedSeconds: parseFloat(elapsed) };
+    this.stats = { moves: this.moves.length, elapsedSeconds: parseFloat(elapsed) };
 
     console.log(`Done: ${this.moves.length} moves in ${elapsed}s`);
   }
@@ -310,10 +343,10 @@ export class PrintingMotion {
    */
   getStatus() {
     return {
-      isRunning:     this.isRunning,
-      totalMoves:    this.moves.length,
-      currentMove:   this._moveIndex,
-      progress:      this.moves.length > 0
+      isRunning: this.isRunning,
+      totalMoves: this.moves.length,
+      currentMove: this._moveIndex,
+      progress: this.moves.length > 0
         ? ((this._moveIndex / this.moves.length) * 100).toFixed(1) + '%'
         : '0%',
       feedrateMmMin: this.currentF,
@@ -396,7 +429,7 @@ export class PrintingMotion {
    * @returns {number} Duration in ms.
    */
   _moveDuration(dx, dy, dz) {
-    const dist     = Math.sqrt(dx * dx + dy * dy + dz * dz);
+    const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
     const speedMmS = (this.currentF / 60) * this.speedMultiplier;
     return Math.max(MIN_MOVE_DURATION_MS, (dist / speedMmS) * 1000);
   }

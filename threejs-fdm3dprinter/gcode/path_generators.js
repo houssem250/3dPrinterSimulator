@@ -50,13 +50,13 @@ export const PathGenerators = Object.freeze({
    * @returns {Array<object>}          Move list for `PrintingMotion.loadMoves()`.
    */
   square(
-    startX  = 50,
-    startY  = 50,
-    size    = 20,
-    layers  = 1,
-    speed   = DEFAULT_SPEED_MM_S,
+    startX = 50,
+    startY = 50,
+    size = 20,
+    layers = 1,
+    speed = DEFAULT_SPEED_MM_S,
   ) {
-    const F     = speed * 60;
+    const F = speed * 60;
     const moves = [];
 
     for (let layer = 0; layer < layers; layer++) {
@@ -68,11 +68,11 @@ export const PathGenerators = Object.freeze({
       }
 
       // Print one closed square
-      moves.push({ cmd: 'G1', X: startX,        Y: startY,        Z: z, F });
-      moves.push({ cmd: 'G1', X: startX + size,  Y: startY,        Z: z, F });
-      moves.push({ cmd: 'G1', X: startX + size,  Y: startY + size, Z: z, F });
-      moves.push({ cmd: 'G1', X: startX,         Y: startY + size, Z: z, F });
-      moves.push({ cmd: 'G1', X: startX,         Y: startY,        Z: z, F });
+      moves.push({ cmd: 'G1', X: startX, Y: startY, Z: z, F });
+      moves.push({ cmd: 'G1', X: startX + size, Y: startY, Z: z, F });
+      moves.push({ cmd: 'G1', X: startX + size, Y: startY + size, Z: z, F });
+      moves.push({ cmd: 'G1', X: startX, Y: startY + size, Z: z, F });
+      moves.push({ cmd: 'G1', X: startX, Y: startY, Z: z, F });
     }
 
     console.log(
@@ -97,14 +97,14 @@ export const PathGenerators = Object.freeze({
    * @returns {Array<object>}
    */
   circle(
-    cx       = 100,
-    cy       = 100,
-    radius   = 20,
-    layers   = 1,
+    cx = 100,
+    cy = 100,
+    radius = 20,
+    layers = 1,
     segments = 36,
-    speed    = DEFAULT_SPEED_MM_S,
+    speed = DEFAULT_SPEED_MM_S,
   ) {
-    const F     = speed * 60;
+    const F = speed * 60;
     const moves = [];
 
     for (let layer = 0; layer < layers; layer++) {
@@ -114,9 +114,9 @@ export const PathGenerators = Object.freeze({
         const angle = (i / segments) * Math.PI * 2;
         moves.push({
           cmd: 'G1',
-          X:   cx + Math.cos(angle) * radius,
-          Y:   cy + Math.sin(angle) * radius,
-          Z:   z,
+          X: cx + Math.cos(angle) * radius,
+          Y: cy + Math.sin(angle) * radius,
+          Z: z,
           F,
         });
       }
@@ -148,41 +148,80 @@ export const PathGenerators = Object.freeze({
    * @returns {Array<object>}
    */
   tower(
-    cx          = 150,
-    cy          = 150,
-    size        = 40,
-    layers      = 10,
-    layerHeight = DEFAULT_LAYER_HEIGHT_MM,
-    speed       = 40,
+    cx = 150,
+    cy = 150,
+    size = 40,
+    layers = 10,
+    layerHeight = 0.3,
+    speed = 40,
   ) {
-    const half  = size / 2;
-    const F     = speed * 60;
+    const half = size / 2;
+    const F = speed * 60;
     const moves = [];
 
-    // Home and lift before starting
-    moves.push({ cmd: 'G28' });
-    moves.push({ cmd: 'G0', X: cx, Y: cy, Z: 5, F: F * 2 });
+    // 1. Initialize Extrusion Tracking
+    let currentE = 0;
+    const extrusionPerMm = 0.05;
+    const extrusionWidth = 0.45; // Standard perimeter width
 
+    // ── START G-CODE (Real Printer Routine) ────────────────
+    moves.push({ cmd: 'G28' });            // Home all axes
+    moves.push({ cmd: 'G90' });            // Absolute positioning
+    moves.push({ cmd: 'M82' });            // Absolute extrusion mode
+    moves.push({ cmd: 'G92', E: 0 });      // Reset Extruder
+
+    // Prime Line (the line real printers draw at the edge to clean the nozzle)
+    moves.push({ cmd: 'G0', X: 10, Y: 10, Z: 0.3, F: F * 2 });
+    currentE += 15 * extrusionPerMm;
+    moves.push({ cmd: 'G1', X: 10, Y: 100, E: currentE, F: 1200 });
+
+    // Move to start position
+    moves.push({ cmd: 'G0', Z: 5, F: F * 2 }); // Lift
+    moves.push({ cmd: 'SET_WIDTH', value: extrusionWidth });
+
+    // ── LAYER LOOP ────────────────────────────────────────
     for (let layer = 0; layer < layers; layer++) {
       const z = (layer + 1) * layerHeight;
 
-      // Travel to bottom-left corner at layer height
+      // Ensure the renderer knows the exact height of this layer segment
+      moves.push({ cmd: 'SET_HEIGHT', value: layerHeight });
+
+      // 1. Travel to corner
       moves.push({ cmd: 'G0', X: cx - half, Y: cy - half, Z: z, F: F * 2 });
 
-      // Print one perimeter
-      moves.push({ cmd: 'G1', X: cx + half, Y: cy - half, Z: z, F });
-      moves.push({ cmd: 'G1', X: cx + half, Y: cy + half, Z: z, F });
-      moves.push({ cmd: 'G1', X: cx - half, Y: cy + half, Z: z, F });
-      moves.push({ cmd: 'G1', X: cx - half, Y: cy - half, Z: z, F });
+      // 2. UN-RETRACT (Recover the 1.0mm we took out at the end of the last layer)
+      // This brings E back up so the very next move starts extruding immediately
+      currentE += 1.0;
+      moves.push({ cmd: 'G1', E: currentE, F: 2400 });
+
+      const moveE = size * extrusionPerMm;
+
+      // Side 1
+      currentE += moveE;
+      moves.push({ cmd: 'G1', X: cx + half, Y: cy - half, Z: z, F, E: currentE });
+
+      // Side 2
+      currentE += moveE;
+      moves.push({ cmd: 'G1', X: cx + half, Y: cy + half, Z: z, F, E: currentE });
+
+      // Side 3
+      currentE += moveE;
+      moves.push({ cmd: 'G1', X: cx - half, Y: cy + half, Z: z, F, E: currentE });
+
+      // Side 4
+      currentE += moveE;
+      moves.push({ cmd: 'G1', X: cx - half, Y: cy - half, Z: z, F, E: currentE });
+
+      // 3. RETRACT at the end of the layer
+      currentE -= 1.0;
+      moves.push({ cmd: 'G1', E: currentE, F: 2400 });
     }
 
-    moves.push({ cmd: 'G28' });
+    // ── END G-CODE ────────────────────────────────────────
+    moves.push({ cmd: 'G28', X: 0, Y: 0 }); // Move bed forward to show part
+    moves.push({ cmd: 'M104', S: 0 });      // Turn off hotend (stats only)
 
-    console.log(
-      `Tower: centre=(${cx},${cy})  size=${size} mm  layers=${layers}  ` +
-      `height=${(layers * layerHeight).toFixed(2)} mm  moves=${moves.length}`,
-    );
     return moves;
-  },
+  }
 
 });

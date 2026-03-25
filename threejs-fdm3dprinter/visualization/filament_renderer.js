@@ -2,27 +2,6 @@
  * @file filament_renderer.js
  * @description Renders live filament as a Three.js line parented to the bed,
  * riding with bed movement automatically.
- *
- * Changes from the original
- * ──────────────────────────
- *  1. reset() added — called by executePath() at the start of every run
- *     to clear the previous mesh before drawing new filament.
- *
- *  2. appendBreak() added — called by printing_motion after every G0
- *     (travel) and G28 (home) move. Starts a new segment so no connector
- *     line is drawn between separate print segments.
- *
- *  3. Single BufferGeometry replaced with a THREE.Group of segments.
- *     The original used ONE continuous geometry. A single NaN-gap approach
- *     was tried but THREE.BufferGeometry.computeBoundingSphere() throws
- *     warnings on NaN position values every frame. Instead, each segment
- *     between travel moves becomes its own THREE.Line — no NaN anywhere.
- *
- *  4. appendPoint() still reads the nozzle world position from Druckkopf.
- *     This works because printing_motion.js calls setPosition() on all
- *     axes right before appendPoint(), guaranteeing the world matrix is
- *     exact at any speedMultiplier value.
- *
  * @module visualization/filament_renderer
  */
 
@@ -41,7 +20,7 @@ export class FilamentRenderer {
     this._color = options.color ?? PRINTER_CONFIG.PRINTING.FILAMENT_COLOR;
 
     /** @type {THREE.Object3D | null} */
-    this._tischNode  = null;
+    this._tischNode = null;
     /** @type {THREE.Object3D | null} */
     this._nozzleNode = null;
 
@@ -62,13 +41,27 @@ export class FilamentRenderer {
     this._group = null;
 
     this._findSceneNodes();
+
+    this._currentWidth = options.width || 0.4;
+    this._currentHeight = options.height || 0.2;
+  }
+
+  // Inside FilamentRenderer class
+  setHeight(h) {
+    // Multiply G-code height (e.g. 0.3) by Scale (10) 
+    // to get the actual visual height (3.0)
+    this._currentHeight = h * PRINTER_CONFIG.MODEL.SCALE;
+  }
+
+  setWidth(w) {
+    this._currentWidth = w * PRINTER_CONFIG.MODEL.SCALE;
   }
 
   // ── Initialisation ──────────────────────────────────────────────────────────
 
   _findSceneNodes() {
     this._scene.traverse((child) => {
-      if (child.name === 'Tisch')     this._tischNode  = child;
+      if (child.name === 'Tisch') this._tischNode = child;
       if (child.name === 'Druckkopf') this._nozzleNode = child;
     });
 
@@ -108,7 +101,7 @@ export class FilamentRenderer {
     if (!this._tischNode) return;
 
     const worldPos = this._readNozzleWorldPosition();
-    const local    = this._worldToTischLocal(worldPos);
+    const local = this._worldToTischLocal(worldPos);
 
     this._segments[this._segments.length - 1].push(local);
     this._rebuildLastSegment();
@@ -177,7 +170,7 @@ export class FilamentRenderer {
   /** Rebuilds only the last (active) segment's Line — earlier segments untouched. */
   _rebuildLastSegment() {
     const segIdx = this._segments.length - 1;
-    const pts    = this._segments[segIdx];
+    const pts = this._segments[segIdx];
     if (pts.length < 2) return;
 
     const group = this._ensureGroup();
@@ -192,7 +185,7 @@ export class FilamentRenderer {
 
     const positions = new Float32Array(pts.length * 3);
     pts.forEach((pt, i) => {
-      positions[i * 3]     = pt.x;
+      positions[i * 3] = pt.x;
       positions[i * 3 + 1] = pt.y;
       positions[i * 3 + 2] = pt.z;
     });
@@ -222,10 +215,10 @@ export class FilamentRenderer {
 export class PathPreview {
 
   constructor(scene, options = {}) {
-    this._scene     = scene;
-    this._color     = options.color     ?? 0x00ff88;
+    this._scene = scene;
+    this._color = options.color ?? 0x00ff88;
     this._mmToScene = options.mmToScene ?? 0.1;
-    this._mesh      = null;
+    this._mesh = null;
   }
 
   show(path) {
@@ -235,7 +228,7 @@ export class PathPreview {
     }
     this.clear();
 
-    const scale     = this._mmToScene;
+    const scale = this._mmToScene;
     const positions = new Float32Array(path.length * 3);
     path.forEach((pt, i) => {
       positions[i * 3 + 0] = pt.x * scale;

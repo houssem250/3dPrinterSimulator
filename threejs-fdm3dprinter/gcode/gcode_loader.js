@@ -63,9 +63,9 @@ export class GCodeLoader {
     return new Promise((resolve, reject) => {
       if (!file) { reject(new Error('loadFromFile: no file provided.')); return; }
 
-      const reader    = new FileReader();
-      reader.onload   = (e) => { this.parse(e.target.result); resolve(this); };
-      reader.onerror  = ()  => reject(new Error('loadFromFile: FileReader error.'));
+      const reader = new FileReader();
+      reader.onload = (e) => { this.parse(e.target.result); resolve(this); };
+      reader.onerror = () => reject(new Error('loadFromFile: FileReader error.'));
       reader.readAsText(file);
     });
   }
@@ -95,6 +95,7 @@ export class GCodeLoader {
     this.moves = [];
     this.stats = _emptyStats();
 
+    //  MOVE THESE TO THE TOP (Before the for loop)
     let absoluteMode = true;
     let curX = 0, curY = 0, curZ = 0, curE = 0;
     let lastZ = null;
@@ -103,11 +104,24 @@ export class GCodeLoader {
     this.stats.totalLines = lines.length;
 
     for (const rawLine of lines) {
+      // Now your comment detection works because the variables exist!
+      if (rawLine.startsWith(';HEIGHT:')) {
+        const h = parseFloat(rawLine.split(':')[1]);
+        if (!isNaN(h)) this.moves.push({ cmd: 'SET_HEIGHT', value: h });
+        continue;
+      }
+
+      if (rawLine.startsWith(';WIDTH:')) {
+        const w = parseFloat(rawLine.split(':')[1]);
+        if (!isNaN(w)) this.moves.push({ cmd: 'SET_WIDTH', value: w });
+        continue;
+      }
+
       const line = rawLine.split(';')[0].trim();
       if (!line) continue;
 
       const tokens = line.toUpperCase().split(/\s+/);
-      const cmd    = tokens[0];
+      const cmd = tokens[0];
       const params = _parseParams(tokens);
 
       // ── G0 / G1 ───────────────────────────────────────────────────────────
@@ -130,6 +144,7 @@ export class GCodeLoader {
           const eDelta = absoluteMode ? params.E - curE : params.E;
           if (eDelta > 0) this.stats.estimatedFilament += eDelta;
           curE = absoluteMode ? params.E : curE + params.E;
+          move.E = params.E;
         }
 
         if (move.Z !== undefined && move.Z !== lastZ) {
@@ -155,7 +170,7 @@ export class GCodeLoader {
       }
 
       // ── Mode switches ──────────────────────────────────────────────────────
-      if (cmd === 'G90') { absoluteMode = true;  continue; }
+      if (cmd === 'G90') { absoluteMode = true; continue; }
       if (cmd === 'G91') { absoluteMode = false; continue; }
 
       // ── G92: Set position ─────────────────────────────────────────────────
@@ -166,7 +181,12 @@ export class GCodeLoader {
         if (params.Z !== undefined) { move.Z = params.Z; curZ = params.Z; }
         if (params.E !== undefined) curE = params.E;
 
-        if (move.X !== undefined || move.Y !== undefined || move.Z !== undefined) {
+        if (params.E !== undefined) {
+          curE = params.E;
+          move.E = params.E;
+        }
+
+        if (move.X !== undefined || move.Y !== undefined || move.Z !== undefined || move.E !== undefined) {
           this.moves.push(move);
           this.stats.parsedMoves++;
         }
@@ -201,7 +221,7 @@ export class GCodeLoader {
     console.log(`   Skipped lines  : ${s.skipped}`);
     console.log(`   Layers         : ${s.layers}`);
     console.log(`   Hotend temp    : ${s.hotendTemp ?? 'not set'} °C`);
-    console.log(`   Bed temp       : ${s.bedTemp    ?? 'not set'} °C`);
+    console.log(`   Bed temp       : ${s.bedTemp ?? 'not set'} °C`);
     console.log(`   Est. filament  : ${s.estimatedFilament.toFixed(1)} mm`);
     console.log('=====================================\n');
   }
@@ -233,12 +253,12 @@ function _parseParams(tokens) {
  */
 function _emptyStats() {
   return {
-    totalLines:        0,
-    parsedMoves:       0,
-    skipped:           0,
-    layers:            0,
-    hotendTemp:        null,
-    bedTemp:           null,
+    totalLines: 0,
+    parsedMoves: 0,
+    skipped: 0,
+    layers: 0,
+    hotendTemp: null,
+    bedTemp: null,
     estimatedFilament: 0,
   };
 }
