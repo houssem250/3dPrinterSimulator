@@ -8,3 +8,11 @@ Fix size of model :
     NOTE : we have in BaseAxis class this.maxTravel  = config.maxTravel  ?? 220; the 220 is suspecious 
 
 fix nozzle start position and home c
+    1- in intial state , get the position of the center of the bed
+    2- get the position of nozzle (as I remeber it's not directly)
+    3- Calc the Dalta between them 
+    4- get the env home (x=0,y=0,z=0)  
+    5- calc Delta of the bed center and env(x=0,y=0)
+    6- calc Delta of the bed center and nozzle
+    7- One we start printing before that , move bed to placement, but placement must be checked in calc , we have corner and center, check their values
+    

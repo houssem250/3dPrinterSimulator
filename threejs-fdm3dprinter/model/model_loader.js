@@ -63,8 +63,11 @@ export class ModelLoader {
 
   /**
    * Normalises the loaded model's scale and logs the bed dimensions to the console.
+   * @deprecated This method has an extreme bug that can irreversibly distort the model. Do not use until it's fixed.
    */
   normalizeModel() {
+    console.error("❌ CRITICAL: normalizeModel() called! This function is currently bugged and distorts the model.");
+    return;
     if (!this.model) return;
 
     const bedPart = this.model.getObjectByName("Tisch");
