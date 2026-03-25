@@ -27,7 +27,8 @@ import { PRINTER_CONFIG } from '../../config/printer_config.js';
 const { MAX_TRAVEL_MM, SCREW_PITCH_MM } = PRINTER_CONFIG.AXES.Z;
 
 /** Default delta range used when physical parts cannot be measured. */
-const FALLBACK_DELTA = Object.freeze({ min: 0, max: 3.0 });
+const fallbackRangeMax = (PRINTER_CONFIG.AXES.Z.MAX_TRAVEL_MM / 100);
+const FALLBACK_DELTA = Object.freeze({ min: 0, max: fallbackRangeMax });
 
 export class ZAxisMotion extends BaseAxis {
 

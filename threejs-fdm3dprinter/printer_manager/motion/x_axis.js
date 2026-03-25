@@ -45,8 +45,8 @@ export class XAxisMotion extends BaseAxis {
    */
   constructor(modelLoader, printerModel, modelScale = 1) {
     super(printerModel, {
-      axisName:   'X',
-      maxTravel:  MAX_TRAVEL_MM,
+      axisName: 'X',
+      maxTravel: MAX_TRAVEL_MM,
       modelScale,
       screwPitch: SCREW_PITCH_MM,
     });
@@ -63,8 +63,8 @@ export class XAxisMotion extends BaseAxis {
 
     // Parts used only for limit calculation (never moved directly)
     this.galgenHorizontral = this.findPartByName('GalgenHorizontral');
-    this.trapezoidScrewX   = this.findPartByName('trapezoid_screwX000');
-    this.rollenGondel      = this.findPartByName('RollenGondel');
+    this.trapezoidScrewX = this.findPartByName('trapezoid_screwX000');
+    this.rollenGondel = this.findPartByName('RollenGondel');
 
     this._calculateLimits();
 
@@ -80,13 +80,14 @@ export class XAxisMotion extends BaseAxis {
   _calculateLimits() {
     if (!this.xGroup || !this.rollenGondel) {
       console.warn('X-axis: cannot calculate limits — missing xGroup or RollenGondel.');
-      this.localMinX = -0.5;
-      this.localMaxX =  0.5;
+      const totalVisualTravel = this.maxTravel * this.modelScale; // 300 * 10 = 3000
+      this.localMinX = -(totalVisualTravel / 2);
+      this.localMaxX = (totalVisualTravel / 2);
       return;
     }
 
     const rollenHalfWidth = this._getCarriageRollerHalfWidth();
-    const stopRollers     = this._collectEndStopRollers();
+    const stopRollers = this._collectEndStopRollers();
 
     if (stopRollers.length < 2) {
       this._applyRailFallbackLimits(rollenHalfWidth);
@@ -103,7 +104,7 @@ export class XAxisMotion extends BaseAxis {
 
   /** @returns {number} Half the world-space width of the carriage roller. */
   _getCarriageRollerHalfWidth() {
-    const box  = new THREE.Box3().setFromObject(this.rollenGondel);
+    const box = new THREE.Box3().setFromObject(this.rollenGondel);
     const size = new THREE.Vector3();
     box.getSize(size);
     return size.x / 2;
@@ -137,7 +138,7 @@ export class XAxisMotion extends BaseAxis {
       this.worldMaxX = railBox.max.x - rollenHalfWidth;
     } else {
       this.worldMinX = -0.5;
-      this.worldMaxX =  0.5;
+      this.worldMaxX = 0.5;
     }
   }
 
@@ -149,7 +150,7 @@ export class XAxisMotion extends BaseAxis {
    */
   _applyRollerLimits(stopRollers, rollenHalfWidth) {
     stopRollers.sort((a, b) => a.min.x - b.min.x);
-    const leftStop  = stopRollers[0];
+    const leftStop = stopRollers[0];
     const rightStop = stopRollers[stopRollers.length - 1];
 
     // Carriage roller centre when touching the left stop
@@ -190,7 +191,7 @@ export class XAxisMotion extends BaseAxis {
     if (!this.xGroup) return;
 
     // Map mm [0 … maxTravel] → local X [localMinX … localMaxX]
-    const t      = positionMm / this.maxTravel;
+    const t = positionMm / this.maxTravel;
     const localX = this.localMinX + t * (this.localMaxX - this.localMinX);
 
     this.xGroup.position.x = localX;
@@ -204,7 +205,7 @@ export class XAxisMotion extends BaseAxis {
   // ── Convenience predicates ──────────────────────────────────────────────────
 
   /** @returns {boolean} True when the carriage is at or below position 0. */
-  isAtLeftLimit()  { return this.currentPosition <= 0; }
+  isAtLeftLimit() { return this.currentPosition <= 0; }
 
   /** @returns {boolean} True when the carriage is at or above maxTravel. */
   isAtRightLimit() { return this.currentPosition >= this.maxTravel; }

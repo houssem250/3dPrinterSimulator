@@ -49,7 +49,7 @@ AppContext.modelLoader = modelLoader;
 modelLoader.loadModel(PRINTER_CONFIG.MODEL.PATH).then((printerModel) => {
 
   // ── 4a. Normalize model size ─────────────────────────────────────────────
-  modelLoader.normalizeModel();
+  //modelLoader.normalizeModel();
 
   // ── 4b. Position model ───────────────────────────────────────────────────
   const scale = PRINTER_CONFIG.MODEL.SCALE;
