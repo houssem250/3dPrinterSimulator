@@ -7,18 +7,6 @@
  * `import()` when `IS_DEV = true` in `main.js`, so it is never bundled
  * into a production build.
  *
- * What changed from the original
- * ───────────────────────────────
- *  - `where()` now uses `AppContext` to reach `modelLoader` instead of
- *    referencing the bare global `modelLoader` (which no longer exists).
- *  - `ModelDebugger` is wired in so `dbg()` exposes all inspection tools
- *    via a single accessor rather than reaching into `modelLoader.debugMode`.
- *  - `startLiveVisualization` calls replaced with `FilamentRenderer` usage
- *    via `printer.setFilamentRenderer()`.
- *  - Path generators (`generateSquarePath`, `generateCirclePath`) now come
- *    from `gcode/path_generators.js` instead of living on the printer object.
- *  - All `window.printer` / `window.scene` accesses go through `AppContext`.
- *
  * Usage (browser console)
  * ───────────────────────
  *   app.examples.square()

@@ -15,6 +15,16 @@
  * @module model/model_constants
  */
 
+import { exp } from "three/src/nodes/math/MathNode.js";
+
+/**
+ * Normalize model size via a uniform size factored for easy calculation.
+ * virtualBedSize is set to 100mm, after resizing the model can be scaled by printer config to match the real bed size.
+ * 
+ * @type {number}
+ */
+export const VIRTUAL_BED_SIZE_MM = 100;
+
 /**
  * Registry of every object name discovered during the last GLB load.
  * Populated by `ModelLoader.loadModel()` — do not write to this directly.

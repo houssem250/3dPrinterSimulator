@@ -21,25 +21,7 @@
  *
  * F (feedrate mm/min) persists across moves — exactly like a real printer.
  * Omitted X/Y/Z in a move means "stay at current position on that axis".
- *
- * What changed from the original
- * ───────────────────────────────
- *  - `_mapZ()` had a divide-then-multiply-by-maxTravel bug (identity op).
- *    Fixed: Z maps the same way as X and Y.
- *  - Duplicate `@param` JSDoc block on the constructor removed.
- *  - `_homeAll()` private helper removed — the same logic is inline in
- *    `executePath()` under `G28`, where it belongs.
- *  - `_addMove()` legacy helper removed — unused after path generators were
- *    rewritten to build move lists directly.
- *  - `generateSquarePath()` / `generateCirclePath()` moved to
- *    `gcode/path_generators.js` — they have no dependency on `this` state
- *    beyond `loadMoves()`, so they don't belong on this class.
- *  - `startLiveVisualization()` / `_appendLivePoint()` / `_rebuildLiveMesh()`
- *    extracted to `visualization/filament_renderer.js` — keeping the
- *    execution engine free of rendering concerns.
- *  - `visualizePath()` (pre-print path preview) moved to
- *    `visualization/path_preview.js`.
- *
+ * 
  * @module printer_manager/motion/printing_motion
  */
 

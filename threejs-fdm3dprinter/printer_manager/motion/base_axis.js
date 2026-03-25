@@ -9,19 +9,6 @@
  *    (`animateToPosition`), and timeline-based (`playTimeline`).
  *  - Declare `updatePartsPosition()` as an abstract hook that each
  *    concrete subclass must implement to move the actual Three.js objects.
- *
- * What changed from the original
- * ───────────────────────────────
- *  - `_easeInOut()` extracted as a named private method instead of an
- *    inline ternary — the formula is non-obvious and deserves a name.
- *  - `moveToPosition()` clamps before deciding instant-vs-animated,
- *    so subclasses never receive an out-of-range value.
- *  - `playTimeline()` now logs the axis name in completion/error messages.
- *  - `home()` duration is sourced from `PRINTER_CONFIG` rather than a
- *    magic `500` literal.
- *  - Abstract guard uses a standard pattern (method name in the message)
- *    rather than a generic "must be implemented by subclass" string.
- *
  * @module printer_manager/motion/base_axis
  */
 
@@ -41,7 +28,7 @@ export class BaseAxis {
     this.printerModel = printerModel;
 
     this.axisName   = config.axisName   ?? 'Axis';
-    this.maxTravel  = config.maxTravel  ?? 220;
+    this.maxTravel  = config.maxTravel  ?? 300;
     this.modelScale = config.modelScale ?? 1.0;
     this.screwPitch = config.screwPitch ?? 8;
 

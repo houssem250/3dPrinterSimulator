@@ -48,7 +48,10 @@ AppContext.modelLoader = modelLoader;
 
 modelLoader.loadModel(PRINTER_CONFIG.MODEL.PATH).then((printerModel) => {
 
-  // ── 4a. Position model ───────────────────────────────────────────────────
+  // ── 4a. Normalize model size ─────────────────────────────────────────────
+  modelLoader.normalizeModel();
+
+  // ── 4b. Position model ───────────────────────────────────────────────────
   const scale = PRINTER_CONFIG.MODEL.SCALE;
   printerModel.position.set(0, 0, 0);
   printerModel.scale.set(scale, scale, scale);
@@ -56,7 +59,7 @@ modelLoader.loadModel(PRINTER_CONFIG.MODEL.PATH).then((printerModel) => {
   applyLoadedCameraPosition(camera);
   modelLoader.logBedDimensions();
 
-  // ── 4b. Initialise axes ──────────────────────────────────────────────────
+  // ── 4c. Initialise axes ──────────────────────────────────────────────────
   const xAxis = new XAxisMotion(modelLoader, printerModel, scale);
   const yAxis = new YAxisMotion(modelLoader, printerModel, scale);
   const zAxis = new ZAxisMotion(modelLoader, printerModel, scale);
@@ -65,7 +68,7 @@ modelLoader.loadModel(PRINTER_CONFIG.MODEL.PATH).then((printerModel) => {
 
   _attachStressTestTimelines(xAxis, yAxis, zAxis);
 
-  // ── 4c. Initialise PrintingMotion ────────────────────────────────────────
+  // ── 4d. Initialise PrintingMotion ────────────────────────────────────────
   const printer = new PrintingMotion(xAxis, yAxis, zAxis, {
     placement:       PRINTER_CONFIG.PRINTING.DEFAULT_PLACEMENT,
     speedMultiplier: PRINTER_CONFIG.PRINTING.DEFAULT_SPEED_MULTIPLIER,

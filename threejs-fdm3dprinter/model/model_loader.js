@@ -2,23 +2,6 @@
  * @file model_loader.js
  * @description Loads the printer GLB, applies material defaults, and exposes
  * a typed `findPartByName()` helper used by every axis class.
- *
- * What changed from the original
- * ───────────────────────────────
- *  - `loadModel()` now returns a `Promise<THREE.Group>` instead of
- *    accepting a callback. This lets `main.js` use `async/await` and
- *    handle errors with a single `.catch()`.
- *  - Static class fields (`PART_NAMES`, `PART_NAMES_TO_COLOR`) moved to
- *    `model_constants.js` so they can be imported without the loader.
- *  - `logTischDimensions()` renamed to `logBedDimensions()` — English
- *    names throughout; German names are kept only for the actual GLB
- *    object name ('Tisch') since that comes from the Blender file.
- *  - `debugMode` boolean guard removed — all debug methods now live in
- *    `model_debugger.js` and are never imported in production.
- *  - `changeColor` / `changeColors` kept here (production-safe operations).
- *  - All `traverse` calls that repeated the same find-by-name pattern
- *    are replaced with the shared `findPartByName()` helper.
- *
  * @module model/model_loader
  */
 
@@ -28,7 +11,9 @@ import {
   PART_NAMES,
   COLOR_OVERRIDES,
   MATERIAL_DEFAULTS,
+  VIRTUAL_BED_SIZE_MM,
 } from './model_constants.js';
+import { PRINTER_CONFIG } from '../config/printer_config.js';
 
 export class ModelLoader {
 
@@ -36,7 +21,7 @@ export class ModelLoader {
    * @param {THREE.Scene} scene  The scene the loaded model will be added to.
    */
   constructor(scene) {
-    this.scene  = scene;
+    this.scene = scene;
     this._loader = new GLTFLoader();
 
     /** @type {THREE.Group | null} The root object of the loaded GLB. */
@@ -74,6 +59,45 @@ export class ModelLoader {
         },
       );
     });
+  }
+
+  /**
+   * Normalises the loaded model's scale and logs the bed dimensions to the console.
+   */
+  normalizeModel() {
+    if (!this.model) return;
+
+    const bedPart = this.model.getObjectByName("Tisch");
+    const referenceObject = bedPart || this.model;
+
+    // 1. Measure the RAW Bed (Before)
+    const boxBefore = new THREE.Box3().setFromObject(referenceObject);
+    const sizeBefore = new THREE.Vector3();
+    boxBefore.getSize(sizeBefore);
+
+    // 2. Calculate individual factors for X and Z to reach 100mm (Virtual)
+    // This "squares" the model internally
+    const factorX = VIRTUAL_BED_SIZE_MM / sizeBefore.x;
+    const factorZ = VIRTUAL_BED_SIZE_MM / sizeBefore.z;
+
+    // For Y (Height), we usually keep it proportional to X to avoid squashing the printer
+    const factorY = factorX;
+
+    // 3. FACTOR 1: Set Non-Uniform Scale to hit 100x100 exactly
+    this.model.scale.set(factorX, factorY, factorZ);
+
+    // 4. FACTOR 2: Scale to Physical Bed (example 300mm)
+    // Since X and Z are now both 100, we can use a single multiplier
+    const physicalScale = PRINTER_CONFIG.BED.WIDTH_MM / VIRTUAL_BED_SIZE_MM;
+    this.model.scale.multiplyScalar(physicalScale);
+
+    // 5. Verify the Square result
+    this.model.updateMatrixWorld();
+    const boxAfter = new THREE.Box3().setFromObject(referenceObject);
+    const sizeAfter = new THREE.Vector3();
+    boxAfter.getSize(sizeAfter);
+
+    console.log(`[SQUARED] Physical Bed: ${sizeAfter.x.toFixed(2)}mm x ${sizeAfter.z.toFixed(2)}mm`);
   }
 
   // ── Part lookup ─────────────────────────────────────────────────────────────
@@ -116,8 +140,8 @@ export class ModelLoader {
     }
 
     const scale = this.model.scale.x;
-    const box   = new THREE.Box3().setFromObject(bed);
-    const size  = new THREE.Vector3();
+    const box = new THREE.Box3().setFromObject(bed);
+    const size = new THREE.Vector3();
     box.getSize(size);
 
     const dimensions = {
@@ -188,7 +212,7 @@ export class ModelLoader {
 
       if (!child.isMesh) return;
 
-      child.castShadow    = true;
+      child.castShadow = true;
       child.receiveShadow = true;
 
       const materials = Array.isArray(child.material)
@@ -200,8 +224,8 @@ export class ModelLoader {
 
         mat.side = THREE.DoubleSide;
         _correctMaterialColor(mat, child.name);
-        mat.roughness   = MATERIAL_DEFAULTS.ROUGHNESS;
-        mat.metalness   = MATERIAL_DEFAULTS.METALNESS;
+        mat.roughness = MATERIAL_DEFAULTS.ROUGHNESS;
+        mat.metalness = MATERIAL_DEFAULTS.METALNESS;
         mat.needsUpdate = true;
       });
     });
@@ -252,7 +276,7 @@ function _correctMaterialColor(mat, partName) {
   const { WHITE_REPLACEMENT, DARKNESS_THRESHOLD, BRIGHTNESS_BOOST } = MATERIAL_DEFAULTS;
 
   const originalHex = mat.color.getHex();
-  const hexString   = mat.color.getHexString();
+  const hexString = mat.color.getHexString();
 
   if (hexString === 'ffffff') {
     mat.color.setHex(WHITE_REPLACEMENT);
@@ -262,6 +286,6 @@ function _correctMaterialColor(mat, partName) {
 
   // Explicit override wins over automatic correction
   if (COLOR_OVERRIDES.has(partName)) {
-    mat.color.setHex(/** @type {number} */ (COLOR_OVERRIDES.get(partName)));
+    mat.color.setHex(/** @type {number} */(COLOR_OVERRIDES.get(partName)));
   }
 }
