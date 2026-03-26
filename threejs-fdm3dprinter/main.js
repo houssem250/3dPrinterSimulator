@@ -46,12 +46,14 @@ addEnvironment(scene);
 const modelLoader = new ModelLoader(scene);
 AppContext.modelLoader = modelLoader;
 
-modelLoader.loadModel(PRINTER_CONFIG.MODEL.PATH).then((printerModel) => {
+const removedParts = new Set(['Zuführung', 'Kabel-Gondel-main', 'Cable_ribbon', 'Plug-220v', '220v_cable', 'IEC_connector']);
+
+modelLoader.loadModel(PRINTER_CONFIG.MODEL.PATH, removedParts).then((printerModel) => {
 
   // ── 4a. Normalize model size ─────────────────────────────────────────────
-  //modelLoader.normalizeModel(); // IGNORE - HAS EXTREME BUG: DO NOT USE, LET IT LATER BE FIXED IN MODEL LOADER.
+  //const scaleFactor = modelLoader.getNormalizeModelFactor();
 
-  // ── 4b. Position model ───────────────────────────────────────────────────
+  // ── 4a. Position model ───────────────────────────────────────────────────
   const scale = PRINTER_CONFIG.MODEL.SCALE;
   printerModel.position.set(0, 0, 0);
   printerModel.scale.set(scale, scale, scale);
@@ -59,7 +61,7 @@ modelLoader.loadModel(PRINTER_CONFIG.MODEL.PATH).then((printerModel) => {
   applyLoadedCameraPosition(camera);
   modelLoader.logBedDimensions();
 
-  // ── 4c. Initialise axes ──────────────────────────────────────────────────
+  // ── 4b. Initialise axes ──────────────────────────────────────────────────
   const xAxis = new XAxisMotion(modelLoader, printerModel, scale);
   const yAxis = new YAxisMotion(modelLoader, printerModel, scale);
   const zAxis = new ZAxisMotion(modelLoader, printerModel, scale);
@@ -68,10 +70,11 @@ modelLoader.loadModel(PRINTER_CONFIG.MODEL.PATH).then((printerModel) => {
 
   _attachStressTestTimelines(xAxis, yAxis, zAxis);
 
-  // ── 4d. Initialise PrintingMotion ────────────────────────────────────────
+  // ── 4c. Initialise PrintingMotion ────────────────────────────────────────
   const printer = new PrintingMotion(xAxis, yAxis, zAxis, {
-    placement:       PRINTER_CONFIG.PRINTING.DEFAULT_PLACEMENT,
+    placement:       'corner',  // 'corner' or 'center' bed origin
     speedMultiplier: PRINTER_CONFIG.PRINTING.DEFAULT_SPEED_MULTIPLIER,
+    modelLoader:     modelLoader,
   });
   AppContext.printer = printer;
 

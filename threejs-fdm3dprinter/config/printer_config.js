@@ -30,6 +30,11 @@ export const PRINTER_CONFIG = Object.freeze({
      * All axis limit calculations must account for this factor.
      */
     SCALE: 10,
+    BED: Object.freeze({
+      /** Nominal bed dimensions in mm. */
+      WIDTH_MM:  300,
+      DEPTH_MM:  300,
+    }),
   }),
 
   // ── Axes ───────────────────────────────────────────────────────────────────

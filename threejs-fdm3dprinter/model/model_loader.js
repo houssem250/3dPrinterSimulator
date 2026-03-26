@@ -11,7 +11,6 @@ import {
   PART_NAMES,
   COLOR_OVERRIDES,
   MATERIAL_DEFAULTS,
-  VIRTUAL_BED_SIZE_MM,
 } from './model_constants.js';
 import { PRINTER_CONFIG } from '../config/printer_config.js';
 
@@ -62,47 +61,67 @@ export class ModelLoader {
   }
 
   /**
+   * Removed parts are specified as a Set of part names will be ignored during loading.
+   * This is useful for parts that are present in the GLB but should not be included in the simulation.
+   */
+  loadModel(url, removedParts = new Set()) {
+    return new Promise((resolve, reject) => {
+      this._loader.load(
+        url,
+        (gltf) => {
+          this.model = gltf.scene;
+
+          // Remove specified parts from the model
+          if (removedParts.size > 0) {
+            this.model.traverse((child) => {
+              if (removedParts.has(child.name)) {
+                child.visible = false; // Hide the part instead of removing it to avoid issues with references
+                console.log(`🚫 Part removed from simulation: ${child.name}`);
+              }
+            });
+          }
+
+          this._setupModel(this.model);
+          this.scene.add(this.model);
+          console.log(`✅ Model loaded: ${url} (${PART_NAMES.size} parts)`);
+          resolve(this.model);
+        },
+        undefined,
+        (error) => {
+          console.error(`❌ Failed to load model: ${url}`, error);
+          reject(error);
+        },
+      );
+    });
+  }
+
+  /**
    * Normalises the loaded model's scale and logs the bed dimensions to the console.
    * @deprecated This method has an extreme bug that can irreversibly distort the model. Do not use until it's fixed.
    */
-  normalizeModel() {
-    console.error("❌ CRITICAL: normalizeModel() called! This function is currently bugged and distorts the model.");
-    return;
+  getNormalizeModelFactor() {
     if (!this.model) return;
 
     const bedPart = this.model.getObjectByName("Tisch");
     const referenceObject = bedPart || this.model;
 
-    // 1. Measure the RAW Bed (Before)
-    const boxBefore = new THREE.Box3().setFromObject(referenceObject);
-    const sizeBefore = new THREE.Vector3();
-    boxBefore.getSize(sizeBefore);
+    // Measure raw size of the reference object
+    const box = new THREE.Box3().setFromObject(referenceObject);
+    const size = new THREE.Vector3();
+    box.getSize(size);
 
-    // 2. Calculate individual factors for X and Z to reach 100mm (Virtual)
-    // This "squares" the model internally
-    const factorX = VIRTUAL_BED_SIZE_MM / sizeBefore.x;
-    const factorZ = VIRTUAL_BED_SIZE_MM / sizeBefore.z;
+    // Target bed size in meters (three.js units)
+    const targetWidth = PRINTER_CONFIG.BED.WIDTH_MM * 0.001;
 
-    // For Y (Height), we usually keep it proportional to X to avoid squashing the printer
-    const factorY = factorX;
+    // Single uniform scale factor
+    const scaleFactor = targetWidth / size.x;
 
-    // 3. FACTOR 1: Set Non-Uniform Scale to hit 100x100 exactly
-    this.model.scale.set(factorX, factorY, factorZ);
-
-    // 4. FACTOR 2: Scale to Physical Bed (example 300mm)
-    // Since X and Z are now both 100, we can use a single multiplier
-    const physicalScale = PRINTER_CONFIG.BED.WIDTH_MM / VIRTUAL_BED_SIZE_MM;
-    this.model.scale.multiplyScalar(physicalScale);
-
-    // 5. Verify the Square result
-    this.model.updateMatrixWorld();
-    const boxAfter = new THREE.Box3().setFromObject(referenceObject);
-    const sizeAfter = new THREE.Vector3();
-    boxAfter.getSize(sizeAfter);
-
-    console.log(`[SQUARED] Physical Bed: ${sizeAfter.x.toFixed(2)}mm x ${sizeAfter.z.toFixed(2)}mm`);
+    console.log(
+      `Normalization factor calculated: ${scaleFactor.toFixed(4)} (target width: ${targetWidth}m, actual width: ${size.x.toFixed(4)}m)`
+    );
+    console.warn('⚠️  getNormalizeModelFactor() is deprecated and may cause irreversible distortion. Use with caution. \nscaleFactor:', scaleFactor);
+    return scaleFactor;
   }
-
   // ── Part lookup ─────────────────────────────────────────────────────────────
 
   /**

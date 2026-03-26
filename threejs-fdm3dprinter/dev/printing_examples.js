@@ -80,27 +80,18 @@ export class PrintingExamples {
   // ── Built-in print examples ─────────────────────────────────────────────────
 
   /** Prints a square at (startX, startY) with given side length and layers. */
-  square(startX = 50, startY = 50, size = 100, layers = 2) {
+  square(startX = 0, startY = 0, size = 100, layers = 2) {
     const moves = PathGenerators.square(startX, startY, size, layers);
     this._runMoves(moves);
   }
 
   /** Prints a circle centred at (cx, cy) with given radius and layers. */
-  circle(cx = 150, cy = 150, radius = 60, layers = 2) {
+  circle(cx = 0, cy = 0, radius = 60, layers = 2) {
     const moves = PathGenerators.circle(cx, cy, radius, layers);
     this._runMoves(moves);
   }
-
-  /**
-   * Prints a hollow calibration tower — use this to verify all three axes
-   * move correctly and layers stack cleanly.
-   *
-   *  Watch for:
-   *   Walls aligned layer-to-layer   → X and Y correct
-   *   Each layer above the previous  → Z correct
-   *   Square is square (not rect)    → X and Y scales match
-   */
-  tower(cx = 150, cy = 150, size = 40, layers = 10, layerHeight = 0.3, speed = 40) {
+  /** Print a calibration tower */
+  tower(cx = 0, cy = 0, size = 40, layers = 10, layerHeight = 0.3, speed = 40) {
     const moves = PathGenerators.tower(cx, cy, size, layers, layerHeight, speed);
     console.log(`Tower: center=(${cx},${cy}) size=${size} mm  layers=${layers}  height=${(layers * layerHeight).toFixed(2)} mm`);
     this._runMoves(moves);

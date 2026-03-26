@@ -202,6 +202,27 @@ export class XAxisMotion extends BaseAxis {
     }
   }
 
+    /**
+   * Keeps each cable mesh visually connected between its fixed frame anchor
+   * and the moving carriage attach-point every frame.
+   *
+   * Algorithm (all in Z_axis local space, X component only):
+   *   1. Get the attach-target's current world-X centre.
+   *   2. Convert both fixedWorldX and targetWorldX → Z_axis local X.
+   *   3. New cable local-X  = midpoint of the two local endpoints.
+   *   4. New cable scale.x  = |gap| / originalSize  (stretches to fill exactly).
+   *
+   * This guarantees the cable mesh always touches both endpoints regardless
+   * of how far the carriage has moved.
+   *
+   * @param {number} _positionMm  Unused — we read live world positions instead.
+   * @deprecated This method is unused and body is removed , it should be reimplemented when there is time to fix elasticity bugs.
+   * It should be called at the end of updatePartsPosition() once the carriage has moved, but currently it causes severe visual bugs and is left out until a proper fix can be implemented.
+   */
+  _updateCableElasticity(_positionMm) {
+    if (this.cableParts.length === 0) return;
+  }
+
   // ── Convenience predicates ──────────────────────────────────────────────────
 
   /** @returns {boolean} True when the carriage is at or below position 0. */

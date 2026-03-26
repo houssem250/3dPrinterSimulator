@@ -26,6 +26,7 @@
  */
 
 import { PRINTER_CONFIG } from '../../config/printer_config.js';
+import * as THREE from 'three';
 
 const {
   DEFAULT_FEEDRATE_MM_MIN,
@@ -59,8 +60,7 @@ export class PrintingMotion {
     this.placement = options.placement ?? DEFAULT_PLACEMENT;
     this.speedMultiplier = options.speedMultiplier ?? DEFAULT_SPEED_MULTIPLIER;
 
-    this.bedWidth = options.bedDimensions?.width ?? xAxis.maxTravel;
-    this.bedDepth = options.bedDimensions?.depth ?? yAxis.maxTravel;
+    this._initBedDimensions(options.modelLoader, options.bedDimensions);
 
     /** @type {Array<object>} */
     this.moves = [];
@@ -84,8 +84,8 @@ export class PrintingMotion {
     this.path = [];
 
     console.log('PrintingMotion ready.');
-    console.log(`   Bed: ${this.bedWidth}×${this.bedDepth} mm  |  placement: ${this.placement}`);
-    console.log(`   maxTravel: X=${xAxis.maxTravel}  Y=${yAxis.maxTravel}  Z=${zAxis.maxTravel}`);
+    console.log(`   Bed in env: ${this.bedWidth}×${this.bedDepth} mm  |  placement: ${this.placement}`);
+    console.log(`   Manual maxTravel: X=${xAxis.maxTravel}  Y=${yAxis.maxTravel}  Z=${zAxis.maxTravel}`);
   }
 
   // ── Move list ───────────────────────────────────────────────────────────────
@@ -355,46 +355,77 @@ export class PrintingMotion {
     console.log('=====================================\n');
   }
 
+/**
+   * Calculates bed size AND world position to align G-code (0,0)
+   * with the front-left corner of the 'Tisch' mesh.
+   */
+  _initBedDimensions(loader, manualDims) {
+    if (loader) {
+      const bedMesh = loader.findPartByName('Tisch');
+      if (bedMesh) {
+        const box = new THREE.Box3().setFromObject(bedMesh);
+        
+        // 1. Get the Size
+        const size = new THREE.Vector3();
+        box.getSize(size);
+        this.bedWidth = size.x * 1000;
+        this.bedDepth = size.z * 1000;
+
+        // 2. Get the "Real World" Corner Position (Virtual 0,0)
+        // In Three.js, the front-left corner is usually min x and max z 
+        // OR min x and min z depending on your export orientation.
+        this.bedWorldXMin = box.min.x; 
+        this.bedWorldZMin = box.min.z;
+
+        console.log(`Bed World Origin (0,0) set to: X=${this.bedWorldXMin}, Z=${this.bedWorldZMin}`);
+        return;
+      }
+    }
+
+    // Fallback
+    this.bedWidth = manualDims?.width ?? this.xAxis.maxTravel;
+    this.bedDepth = manualDims?.depth ?? this.yAxis.maxTravel;
+    this.bedWorldXMin = 0;
+    this.bedWorldZMin = 0;
+  }
+
   // ── Coordinate mapping ──────────────────────────────────────────────────────
 
+// --- FIXED COORDINATE MAPPING ---
+
   /**
-   * Maps G-code X mm [0 … bedWidth] → axis position [0 … xAxis.maxTravel].
-   * @param {number} gcodeX
-   * @returns {number}
+   * Maps G-code X to motor position.
+   * Fixed 'center' logic: shifts the coordinate by half the bed width.
    */
   _mapX(gcodeX) {
-    return Math.max(0, Math.min(
-      (gcodeX / this.bedWidth) * this.xAxis.maxTravel,
-      this.xAxis.maxTravel,
-    ));
+    let val = gcodeX;
+    if (this.placement === 'center') {
+      val += this.bedWidth / 2;
+    }
+    // Clamp to bed and then scale to motor travel
+    const clamped = Math.max(0, Math.min(val, this.bedWidth));
+    return (clamped / this.bedWidth) * this.xAxis.maxTravel;
   }
 
   /**
-   * Maps G-code Y mm [0 … bedDepth] → axis position [0 … yAxis.maxTravel].
-   * @param {number} gcodeY
-   * @returns {number}
+   * Maps G-code Y to motor position.
+   * Fixed 'center' logic: shifts the coordinate by half the bed depth.
    */
   _mapY(gcodeY) {
-    return Math.max(0, Math.min(
-      (gcodeY / this.bedDepth) * this.yAxis.maxTravel,
-      this.yAxis.maxTravel,
-    ));
+    let val = gcodeY;
+    if (this.placement === 'center') {
+      val += this.bedDepth / 2;
+    }
+    const clamped = Math.max(0, Math.min(val, this.bedDepth));
+    return (clamped / this.bedDepth) * this.yAxis.maxTravel;
   }
 
   /**
-   * Maps G-code Z mm [0 … zAxis.maxTravel] → axis position [0 … zAxis.maxTravel].
-   *
-   * Bug fix: the original divided by `zAxis.maxTravel` then multiplied by
-   * `zAxis.maxTravel`, which is a no-op identity. The map now mirrors X and Y.
-   *
-   * @param {number} gcodeZ
-   * @returns {number}
+   * Maps G-code Z (1:1 relationship with travel).
    */
   _mapZ(gcodeZ) {
-    return Math.max(0, Math.min(
-      (gcodeZ / this.zAxis.maxTravel) * this.zAxis.maxTravel,
-      this.zAxis.maxTravel,
-    ));
+    // No ratio needed for Z, just physical clamping
+    return Math.max(0, Math.min(gcodeZ, this.zAxis.maxTravel));
   }
 
   // ── Private helpers ─────────────────────────────────────────────────────────

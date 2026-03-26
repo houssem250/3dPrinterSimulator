@@ -1,3 +1,5 @@
+ALWAYS ASK YOUR SELF : is this the good way ? is it the target ?  
+
 Fix size of model :
     1- get bed dimention of .glb model 
     2- resize model by it's bed dimension and unify unity to 1 or 0.1 to make calculation much easier (so bed will be 100mm*100mm), we call the factor of resize and we resize the whole model
@@ -15,4 +17,21 @@ fix nozzle start position and home c
     5- calc Delta of the bed center and env(x=0,y=0)
     6- calc Delta of the bed center and nozzle
     7- One we start printing before that , move bed to placement, but placement must be checked in calc , we have corner and center, check their values
-    
+
+    is it the good way ? or I just 
+    1- get gcode and find the center of the model 
+    2- center of model can be :
+        a- load code and in sequence find the center , it could be hard ? lot of calcs ?
+        b- create gcode model virtualizer, this will load gcode than build a three.js model, get the box and find the x,y center 
+    3- apply the center model on the center of the bed , 
+    4- find the printing start from gcode and where is it in the adapted position 
+    5- it's like a layer between gcode and printer wich convert positions 
+    6- make sure when printing start the bed is in good position because nozzle can just move in X axis but X axis is a child of Z axis so bed will be in horizental center if nozzle horizental 
+
+Sperate printer config to 
+    Printer profile for simulator 
+    and 
+    Printer glb model info
+
+    printer_config_js
+    simulation_config.js
