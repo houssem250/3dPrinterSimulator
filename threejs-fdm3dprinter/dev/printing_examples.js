@@ -79,21 +79,21 @@ export class PrintingExamples {
 
   // ── Built-in print examples ─────────────────────────────────────────────────
 
-  /** Prints a square at (startX, startY) with given side length and layers. */
-  square(startX = 0, startY = 0, size = 100, layers = 2) {
+  /** Prints a square at default centre with given side length and layers. */
+  square(startX = undefined, startY = undefined, size = 40, layers = 2) {
     const moves = PathGenerators.square(startX, startY, size, layers);
     this._runMoves(moves);
   }
 
-  /** Prints a circle centred at (cx, cy) with given radius and layers. */
-  circle(cx = 0, cy = 0, radius = 60, layers = 2) {
+  /** Prints a circle at default centre with given radius and layers. */
+  circle(cx = undefined, cy = undefined, radius = 30, layers = 2) {
     const moves = PathGenerators.circle(cx, cy, radius, layers);
     this._runMoves(moves);
   }
-  /** Print a calibration tower */
-  tower(cx = 0, cy = 0, size = 40, layers = 10, layerHeight = 0.3, speed = 40) {
+  /** Print a calibration tower at default centre */
+  tower(cx = undefined, cy = undefined, size = 40, layers = 10, layerHeight = undefined, speed = 40) {
     const moves = PathGenerators.tower(cx, cy, size, layers, layerHeight, speed);
-    console.log(`Tower: center=(${cx},${cy}) size=${size} mm  layers=${layers}  height=${(layers * layerHeight).toFixed(2)} mm`);
+    console.log(`Tower: size=${size} mm  layers=${layers}  height=${(layers * (layerHeight||0.2)).toFixed(2)} mm`);
     this._runMoves(moves);
   }
 

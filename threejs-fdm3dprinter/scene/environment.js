@@ -10,9 +10,10 @@
  */
 
 import * as THREE from 'three';
-import { PRINTER_CONFIG } from '../config/printer_config.js';
+import { SCENE_CONFIG } from '../config/scene_config.js';
 
-const { GRID, FLOOR } = PRINTER_CONFIG.SCENE;
+
+const { GRID, FLOOR } = SCENE_CONFIG.SCENE;
 
 // ── Public API ────────────────────────────────────────────────────────────────
 

@@ -1,211 +1,294 @@
 /**
  * @file filament_renderer.js
- * @description Renders live filament as a Three.js line parented to the bed,
- * riding with bed movement automatically.
+ * @description Renders live filament parented to the Tisch (bed) so that
+ * deposited filament rides with bed movement exactly like real FDM printing.
+ *
+ * Coordinate strategy
+ * ───────────────────
+ * 1. FilamentGroup is added as a CHILD of Tisch, so it inherits Tisch's
+ *    world transform and moves with the bed automatically.
+ *
+ * 2. The GLB model has scale ×10 applied at the root, which propagates down
+ *    to Tisch. If we parent FilamentGroup to Tisch without correction, all
+ *    geometry coordinates would need to be in Tisch local units (×0.1 of mm).
+ *    Instead we set FilamentGroup.scale = (1/10, 1/10, 1/10) to cancel the
+ *    inherited scale, letting us work in world-unit coordinates directly.
+ *
+ * 3. For each print point we:
+ *    a. Force scene.updateMatrixWorld(true) to flush all dirty matrices.
+ *    b. Read the nozzle tip world position via Box3 on Druckkopf.
+ *    c. Convert world → FilamentGroup local space via the group's inverse
+ *       world matrix. Because of the scale cancellation the local coords
+ *       end up in the same units as world space.
+ *
+ * 4. When the bed moves (Y-axis), all the FilamentGroup children move with
+ *    Tisch automatically — the previously deposited geometry stays "stuck"
+ *    to the bed surface.
+ *
+ * Tube radius
+ * ──────────
+ *   sceneUnitsPerMm = bedWidth_worldUnits / bedWidth_mm
+ *   radius = (layerHeight_mm / 2) × sceneUnitsPerMm
+ * bedWidth_worldUnits is measured via Box3 on Tisch in world space.
+ *
  * @module visualization/filament_renderer
  */
 
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { PRINTER_CONFIG } from '../config/printer_config.js';
+
+const FILAMENT_COLOR    = PRINTER_CONFIG.PRINTING.FILAMENT_COLOR;
+const MODEL_SCALE       = PRINTER_CONFIG.MODEL.SCALE;   // 10
+const TUBE_RADIAL_SEGS  = 5;
+const MAX_TUBE_SEGMENTS = 4000;
 
 export class FilamentRenderer {
 
   /**
    * @param {THREE.Scene} scene
    * @param {object}  [options]
-   * @param {number}  [options.color]  Filament line color hex.
+   * @param {number}  [options.color]   Filament hex colour.
+   * @param {number}  [options.width]   Initial extrusion width mm.
+   * @param {number}  [options.height]  Initial layer height mm.
    */
   constructor(scene, options = {}) {
     this._scene = scene;
-    this._color = options.color ?? PRINTER_CONFIG.PRINTING.FILAMENT_COLOR;
+    this._color = options.color ?? FILAMENT_COLOR;
+
+    this._meshMat = new THREE.MeshStandardMaterial({
+      color:     this._color,
+      roughness: 0.75,
+      metalness: 0.05,
+    });
+    this._lineMat = new THREE.LineBasicMaterial({
+      color:     this._color,
+      linewidth: 2,
+    });
 
     /** @type {THREE.Object3D | null} */
-    this._tischNode = null;
+    this._tischNode  = null;
     /** @type {THREE.Object3D | null} */
     this._nozzleNode = null;
 
-    /** World-space Y of the bed top surface. */
-    this._bedTopY = 0;
+    // Measured in world space after matrix flush
+    this._bedTopWorldY       = 0;
+    this._bedWidthWorldUnits = 1;
 
-    /**
-     * Array of segments. Each is an array of {x,y,z} points in Tisch local space.
-     * appendBreak() starts a new segment. Each segment → one THREE.Line.
-     * @type {Array<Array<{x:number,y:number,z:number}>>}
-     */
-    this._segments = [[]];
+    this._layerHeightMm  = options.height ?? 0.20;
+    this._extrudeWidthMm = options.width  ?? 0.45;
 
-    /**
-     * Group holding one THREE.Line per segment, parented to Tisch.
-     * @type {THREE.Group | null}
-     */
+    /** Points in FilamentGroup local space for the active segment */
+    this._currentSeg = [];
+    this._segCount   = 0;
+
+    /** @type {THREE.Group | null}  Child of Tisch, scale-corrected */
     this._group = null;
 
-    this._findSceneNodes();
-
-    this._currentWidth = options.width || 0.4;
-    this._currentHeight = options.height || 0.2;
+    this._findNodes();
   }
 
-  // Inside FilamentRenderer class
-  setHeight(h) {
-    // Multiply G-code height (e.g. 0.3) by Scale (10) 
-    // to get the actual visual height (3.0)
-    this._currentHeight = h * PRINTER_CONFIG.MODEL.SCALE;
-  }
+  // ── Setters ─────────────────────────────────────────────────────────────────
 
-  setWidth(w) {
-    this._currentWidth = w * PRINTER_CONFIG.MODEL.SCALE;
-  }
-
-  // ── Initialisation ──────────────────────────────────────────────────────────
-
-  _findSceneNodes() {
-    this._scene.traverse((child) => {
-      if (child.name === 'Tisch') this._tischNode = child;
-      if (child.name === 'Druckkopf') this._nozzleNode = child;
-    });
-
-    if (!this._tischNode) {
-      console.warn('FilamentRenderer: Tisch not found — live filament disabled.');
-      return;
-    }
-    if (!this._nozzleNode) {
-      console.warn('FilamentRenderer: Druckkopf not found — falling back to bed centre.');
-    }
-
-    this._tischNode.updateWorldMatrix(true, true);
-    const box = new THREE.Box3().setFromObject(this._tischNode);
-    this._bedTopY = box.max.y;
-    console.log(`FilamentRenderer ready.  Bed top Y: ${this._bedTopY.toFixed(4)}`);
-  }
+  setHeight(h) { this._layerHeightMm  = h; }
+  setWidth(w)  { this._extrudeWidthMm = w; }
 
   // ── Public API ──────────────────────────────────────────────────────────────
 
-  /**
-   * Clears all geometry and resets for a fresh print run.
-   * Called automatically by PrintingMotion.executePath() at run start.
-   * @returns {this}
-   */
   reset() {
     this._destroyGroup();
-    this._segments = [[]];
+    this._currentSeg = [];
+    this._segCount   = 0;
     return this;
   }
 
   /**
-   * Appends a filament deposit point after a G1 move.
-   * Reads the nozzle world position from Druckkopf directly — correct
-   * because printing_motion.js snaps all axes with setPosition() first.
+   * Appends the nozzle tip position (converted to FilamentGroup local space)
+   * as a print point. Call AFTER all three axis setPosition() calls.
    */
-  appendPoint(_gcodeX, _gcodeY, _gcodeZ) {
+  appendPoint() {
     if (!this._tischNode) return;
 
-    const worldPos = this._readNozzleWorldPosition();
-    const local = this._worldToTischLocal(worldPos);
+    // Flush all dirty local transforms → world matrices
+    this._scene.updateMatrixWorld(true);
 
-    this._segments[this._segments.length - 1].push(local);
-    this._rebuildLastSegment();
+    const worldPos = this._nozzleWorldPos();
+    const localPos = this._worldToGroupLocal(worldPos);
+    this._currentSeg.push(localPos);
   }
 
-  /**
-   * Starts a new segment after a G0 (travel) or G28 (home) move.
-   * Prevents a connector line being drawn between separate print segments.
-   */
+  /** Commits active segment and starts a new one (travel/home/retract). */
   appendBreak() {
     if (!this._tischNode) return;
-    // Only start a new segment if the current one has points
-    if (this._segments[this._segments.length - 1].length > 0) {
-      this._segments.push([]);
+    this._commitSegment();
+    this._currentSeg = [];
+  }
+
+  clear() {
+    this._destroyGroup();
+    this._currentSeg = [];
+    this._segCount   = 0;
+  }
+
+  dispose() {
+    this.clear();
+    this._meshMat.dispose();
+    this._lineMat.dispose();
+  }
+
+  // ── Private: node discovery ──────────────────────────────────────────────────
+
+  _findNodes() {
+    this._scene.traverse((child) => {
+      if (child.name === 'Tisch')      this._tischNode  = child;
+      if (child.name === 'Druckkopf') this._nozzleNode = child;
+    });
+
+    if (!this._tischNode) {
+      console.warn('FilamentRenderer: "Tisch" not found — filament disabled.');
+      return;
     }
+    if (!this._nozzleNode) {
+      console.warn('FilamentRenderer: "Druckkopf" not found — bed-centre fallback.');
+    }
+
+    // Measure bed in world space (need fresh matrices)
+    this._scene.updateMatrixWorld(true);
+    const box = new THREE.Box3().setFromObject(this._tischNode);
+    this._bedTopWorldY       = box.max.y;
+    this._bedWidthWorldUnits = box.max.x - box.min.x;
+
+    console.log(
+      `FilamentRenderer ready. ` +
+      `Bed top Y=${this._bedTopWorldY.toFixed(4)}  ` +
+      `width=${this._bedWidthWorldUnits.toFixed(4)} world-units`,
+    );
+  }
+
+  // ── Private: coordinate helpers ──────────────────────────────────────────────
+
+  /** Returns nozzle tip in world space. Assumes matrices already updated. */
+  _nozzleWorldPos() {
+    if (this._nozzleNode) {
+      const nb = new THREE.Box3().setFromObject(this._nozzleNode);
+      return new THREE.Vector3(
+        (nb.min.x + nb.max.x) / 2,
+        nb.min.y,                        // tip = bottom of nozzle mesh
+        (nb.min.z + nb.max.z) / 2,
+      );
+    }
+    // Fallback: top-centre of Tisch
+    const tb = new THREE.Box3().setFromObject(this._tischNode);
+    return new THREE.Vector3(
+      (tb.min.x + tb.max.x) / 2,
+      this._bedTopWorldY,
+      (tb.min.z + tb.max.z) / 2,
+    );
   }
 
   /**
-   * Removes all filament from the scene.
-   * Preserves cached Tisch/nozzle references for subsequent prints.
+   * Converts a world-space Vector3 to FilamentGroup local space.
+   * Because FilamentGroup has scale (1/MODEL_SCALE) applied and is parented
+   * to Tisch, its world matrix combines Tisch's transform with the inverse
+   * scale correction. The result is in the same units as world space.
    */
-  clear() {
-    this._destroyGroup();
-    this._segments = [[]];
-    console.log('FilamentRenderer: cleared.');
+  _worldToGroupLocal(worldPos) {
+    const group = this._ensureGroup();
+    group.updateWorldMatrix(true, false);
+    const invMat = new THREE.Matrix4().copy(group.matrixWorld).invert();
+    return worldPos.clone().applyMatrix4(invMat);
   }
 
-  // ── Private helpers ─────────────────────────────────────────────────────────
+  // ── Private: tube radius ─────────────────────────────────────────────────────
 
-  _readNozzleWorldPosition() {
-    if (this._nozzleNode) {
-      this._nozzleNode.updateWorldMatrix(true, true);
-      const nb = new THREE.Box3().setFromObject(this._nozzleNode);
-      return {
-        x: (nb.min.x + nb.max.x) / 2,
-        y: nb.min.y,
-        z: (nb.min.z + nb.max.z) / 2,
-      };
+  _tubeRadius() {
+    const bedMm   = PRINTER_CONFIG.hardware.bed.width;   // 300 mm
+    const suPerMm = this._bedWidthWorldUnits / bedMm;
+    return (this._layerHeightMm / 2) * suPerMm;
+  }
+
+  // ── Private: geometry ────────────────────────────────────────────────────────
+
+  _commitSegment() {
+    const pts = this._currentSeg;
+    if (pts.length < 2) return;
+
+    const grp = this._ensureGroup();
+
+    if (this._segCount < MAX_TUBE_SEGMENTS) {
+      // Remove duplicate points that are too close together
+      const uniq = [pts[0]];
+      for (let i = 1; i < pts.length; i++) {
+        if (pts[i].distanceTo(pts[i - 1]) > 1e-5) uniq.push(pts[i]);
+      }
+      if (uniq.length < 2) return;
+
+      const radius = this._tubeRadius();
+
+      try {
+        const geometries = [];
+        for (let i = 0; i < uniq.length - 1; i++) {
+          const curve = new THREE.LineCurve3(uniq[i], uniq[i + 1]);
+          const geo = new THREE.TubeGeometry(curve, 1, radius, TUBE_RADIAL_SEGS, false);
+          geometries.push(geo);
+        }
+
+        if (geometries.length > 0) {
+          const merged = mergeGeometries(geometries);
+          grp.add(new THREE.Mesh(merged, this._meshMat));
+        }
+      } catch (err) {
+        console.warn('Tube geom failed:', err);
+        // If tube geometry fails, fall back to line
+        this._commitLine(pts, grp);
+      }
+    } else {
+      this._commitLine(pts, grp);
     }
-    this._tischNode.updateWorldMatrix(true, true);
-    const tb = new THREE.Box3().setFromObject(this._tischNode);
-    return {
-      x: (tb.min.x + tb.max.x) / 2,
-      y: this._bedTopY,
-      z: (tb.min.z + tb.max.z) / 2,
-    };
+
+    this._segCount++;
   }
 
-  _worldToTischLocal(world) {
-    const invMat = new THREE.Matrix4()
-      .copy(this._tischNode.matrixWorld)
-      .invert();
-    const local = new THREE.Vector3(world.x, world.y, world.z)
-      .applyMatrix4(invMat);
-    return { x: local.x, y: local.y, z: local.z };
+  _commitLine(pts, grp) {
+    const buf = new Float32Array(pts.length * 3);
+    pts.forEach((p, i) => {
+      buf[i * 3]     = p.x;
+      buf[i * 3 + 1] = p.y;
+      buf[i * 3 + 2] = p.z;
+    });
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(buf, 3));
+    grp.add(new THREE.Line(geo, this._lineMat));
   }
 
+  // ── Private: group management ────────────────────────────────────────────────
+
+  /**
+   * Creates (or returns) the FilamentGroup parented to Tisch.
+   * Scale is set to 1/MODEL_SCALE to cancel the ×10 inherited from the GLB root.
+   * This lets us store coordinates in world-unit scale rather than Tisch-local
+   * micro-units.
+   */
   _ensureGroup() {
     if (!this._group) {
       this._group = new THREE.Group();
-      (this._tischNode ?? this._scene).add(this._group);
+      this._group.name = 'FilamentGroup';
+
+      // Cancel the inherited ×MODEL_SCALE from the GLB hierarchy
+      const inv = 1 / MODEL_SCALE;
+      this._group.scale.set(inv, inv, inv);
+
+      // Parent to Tisch — filament now moves with the bed
+      this._tischNode.add(this._group);
     }
     return this._group;
   }
 
-  /** Rebuilds only the last (active) segment's Line — earlier segments untouched. */
-  _rebuildLastSegment() {
-    const segIdx = this._segments.length - 1;
-    const pts = this._segments[segIdx];
-    if (pts.length < 2) return;
-
-    const group = this._ensureGroup();
-
-    // Remove previous Line for this segment (always the last child)
-    if (group.children.length > segIdx) {
-      const old = group.children[segIdx];
-      group.remove(old);
-      if (old.geometry) old.geometry.dispose();
-      if (old.material) old.material.dispose();
-    }
-
-    const positions = new Float32Array(pts.length * 3);
-    pts.forEach((pt, i) => {
-      positions[i * 3] = pt.x;
-      positions[i * 3 + 1] = pt.y;
-      positions[i * 3 + 2] = pt.z;
-    });
-
-    const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-    group.add(new THREE.Line(
-      geo,
-      new THREE.LineBasicMaterial({ color: this._color, linewidth: 2 }),
-    ));
-  }
-
   _destroyGroup() {
     if (!this._group) return;
-    this._group.children.slice().forEach((child) => {
-      this._group.remove(child);
-      if (child.geometry) child.geometry.dispose();
-      if (child.material) child.material.dispose();
-    });
-    if (this._group.parent) this._group.parent.remove(this._group);
+    this._group.traverse((child) => { child.geometry?.dispose(); });
+    this._group.clear();
+    this._group.parent?.remove(this._group);
     this._group = null;
   }
 }
@@ -213,37 +296,28 @@ export class FilamentRenderer {
 // ── PathPreview ───────────────────────────────────────────────────────────────
 
 export class PathPreview {
-
   constructor(scene, options = {}) {
     this._scene = scene;
     this._color = options.color ?? 0x00ff88;
-    this._mmToScene = options.mmToScene ?? 0.1;
-    this._mesh = null;
+    this._mesh  = null;
   }
 
   show(path) {
-    if (!path || path.length < 2) {
-      console.warn('PathPreview.show(): need at least 2 points.');
-      return;
-    }
+    if (!path || path.length < 2) return;
     this.clear();
-
-    const scale = this._mmToScene;
-    const positions = new Float32Array(path.length * 3);
+    const buf = new Float32Array(path.length * 3);
     path.forEach((pt, i) => {
-      positions[i * 3 + 0] = pt.x * scale;
-      positions[i * 3 + 1] = pt.z * scale;
-      positions[i * 3 + 2] = pt.y * scale;
+      buf[i * 3]     = pt.x;
+      buf[i * 3 + 1] = pt.z;
+      buf[i * 3 + 2] = pt.y;
     });
-
-    const geometry = new THREE.BufferGeometry();
-    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(buf, 3));
     this._mesh = new THREE.Line(
-      geometry,
-      new THREE.LineBasicMaterial({ color: this._color, linewidth: 2 }),
+      geo,
+      new THREE.LineBasicMaterial({ color: this._color, transparent: true, opacity: 0.35 }),
     );
     this._scene.add(this._mesh);
-    console.log(`PathPreview: showing ${path.length} points.`);
   }
 
   clear() {
@@ -252,6 +326,5 @@ export class PathPreview {
     this._mesh.geometry.dispose();
     this._mesh.material.dispose();
     this._mesh = null;
-    console.log('PathPreview: cleared.');
   }
 }

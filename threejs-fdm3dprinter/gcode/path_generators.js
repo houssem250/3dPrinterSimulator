@@ -33,7 +33,9 @@
 
 import { PRINTER_CONFIG } from '../config/printer_config.js';
 
-const { DEFAULT_SPEED_MM_S, DEFAULT_LAYER_HEIGHT_MM } = PRINTER_CONFIG.PRINTING;
+const { DEFAULT_SPEED_MM_S, DEFAULT_LAYER_HEIGHT_MM, DEFAULT_EXTRUSION_WIDTH_MM = 0.45 } = PRINTER_CONFIG.PRINTING;
+const { MAX_TRAVEL_MM: X_MAX } = PRINTER_CONFIG.AXES.X;
+const { MAX_TRAVEL_MM: Y_MAX } = PRINTER_CONFIG.AXES.Y;
 
 export const PathGenerators = Object.freeze({
 
@@ -50,34 +52,58 @@ export const PathGenerators = Object.freeze({
    * @returns {Array<object>}          Move list for `PrintingMotion.loadMoves()`.
    */
   square(
-    startX = 50,
-    startY = 50,
-    size = 20,
-    layers = 1,
+    startX = undefined,
+    startY = undefined,
+    size = 40,
+    layers = 2,
     speed = DEFAULT_SPEED_MM_S,
   ) {
+    if (startX === undefined) startX = (X_MAX - size) / 2;
+    if (startY === undefined) startY = (Y_MAX - size) / 2;
+
     const F = speed * 60;
     const moves = [];
+    let currentE = 0;
+    const extrusionPerMm = 0.05;
+
+    moves.push({ cmd: 'G28' });
+    moves.push({ cmd: 'G90' });
+    moves.push({ cmd: 'M82' });
+    moves.push({ cmd: 'G92', E: 0 });
 
     for (let layer = 0; layer < layers; layer++) {
-      const z = layer * DEFAULT_LAYER_HEIGHT_MM;
+      const z = (layer + 1) * DEFAULT_LAYER_HEIGHT_MM;
 
-      // Lift and travel to start corner on layers after the first
+      // Lift and travel to start corner
+      moves.push({ cmd: 'G0', X: startX, Y: startY, Z: z, F: F * 2 });
+
+      // Un-retract if not first layer
       if (layer > 0) {
-        moves.push({ cmd: 'G0', X: startX, Y: startY, Z: z + 1, F: F * 2 });
+        currentE += 1.0;
+        moves.push({ cmd: 'G1', E: currentE, F: 2400 });
       }
 
+      const moveE = size * extrusionPerMm;
+
       // Print one closed square
-      moves.push({ cmd: 'G1', X: startX, Y: startY, Z: z, F });
-      moves.push({ cmd: 'G1', X: startX + size, Y: startY, Z: z, F });
-      moves.push({ cmd: 'G1', X: startX + size, Y: startY + size, Z: z, F });
-      moves.push({ cmd: 'G1', X: startX, Y: startY + size, Z: z, F });
-      moves.push({ cmd: 'G1', X: startX, Y: startY, Z: z, F });
+      currentE += moveE;
+      moves.push({ cmd: 'G1', X: startX + size, Y: startY, Z: z, F, E: currentE });
+      currentE += moveE;
+      moves.push({ cmd: 'G1', X: startX + size, Y: startY + size, Z: z, F, E: currentE });
+      currentE += moveE;
+      moves.push({ cmd: 'G1', X: startX, Y: startY + size, Z: z, F, E: currentE });
+      currentE += moveE;
+      moves.push({ cmd: 'G1', X: startX, Y: startY, Z: z, F, E: currentE });
+
+      // Retract
+      currentE -= 1.0;
+      moves.push({ cmd: 'G1', E: currentE, F: 2400 });
     }
 
+    moves.push({ cmd: 'G28', X: 0, Y: 0 }); // Move bed forward
+
     console.log(
-      `Square path: origin=(${startX},${startY})  size=${size} mm  ` +
-      `layers=${layers}  moves=${moves.length}`,
+      `Square path: origin=(${startX.toFixed(1)},${startY.toFixed(1)}) size=${size} mm layers=${layers} moves=${moves.length}`,
     );
     return moves;
   },
@@ -97,34 +123,64 @@ export const PathGenerators = Object.freeze({
    * @returns {Array<object>}
    */
   circle(
-    cx = 100,
-    cy = 100,
-    radius = 20,
-    layers = 1,
+    cx = undefined,
+    cy = undefined,
+    radius = 30,
+    layers = 2,
     segments = 36,
     speed = DEFAULT_SPEED_MM_S,
   ) {
+    if (cx === undefined) cx = X_MAX / 2;
+    if (cy === undefined) cy = Y_MAX / 2;
+
     const F = speed * 60;
     const moves = [];
+    let currentE = 0;
+    const extrusionPerMm = 0.05;
+    const segmentLength = (2 * Math.PI * radius) / segments;
+    const moveE = segmentLength * extrusionPerMm;
+
+    moves.push({ cmd: 'G28' });
+    moves.push({ cmd: 'G90' });
+    moves.push({ cmd: 'M82' });
+    moves.push({ cmd: 'G92', E: 0 });
 
     for (let layer = 0; layer < layers; layer++) {
-      const z = layer * DEFAULT_LAYER_HEIGHT_MM;
+      const z = (layer + 1) * DEFAULT_LAYER_HEIGHT_MM;
 
-      for (let i = 0; i <= segments; i++) {
+      // Travel to first point
+      const startX = cx + radius;
+      const startY = cy;
+      moves.push({ cmd: 'G0', X: startX, Y: startY, Z: z, F: F * 2 });
+
+      // Un-retract if not first layer
+      if (layer > 0) {
+        currentE += 1.0;
+        moves.push({ cmd: 'G1', E: currentE, F: 2400 });
+      }
+
+      for (let i = 1; i <= segments; i++) {
         const angle = (i / segments) * Math.PI * 2;
+        currentE += moveE;
         moves.push({
           cmd: 'G1',
           X: cx + Math.cos(angle) * radius,
           Y: cy + Math.sin(angle) * radius,
           Z: z,
           F,
+          E: currentE,
         });
       }
+
+      // Retract
+      currentE -= 1.0;
+      moves.push({ cmd: 'G1', E: currentE, F: 2400 });
     }
 
+    moves.push({ cmd: 'G28', X: 0, Y: 0 }); // Move bed forward
+
     console.log(
-      `Circle path: centre=(${cx},${cy})  r=${radius} mm  ` +
-      `layers=${layers}  moves=${moves.length}`,
+      `Circle path: centre=(${cx.toFixed(1)},${cy.toFixed(1)}) r=${radius} mm layers=${layers} moves=${moves.length}`,
     );
     return moves;
   },
@@ -148,13 +204,17 @@ export const PathGenerators = Object.freeze({
    * @returns {Array<object>}
    */
   tower(
-    cx = 150,
-    cy = 150,
+    cx = undefined,
+    cy = undefined,
     size = 40,
     layers = 10,
-    layerHeight = 0.3,
-    speed = 40,
+    layerHeight = undefined,
+    speed = DEFAULT_SPEED_MM_S,
   ) {
+    if (cx === undefined) cx = X_MAX / 2;
+    if (cy === undefined) cy = Y_MAX / 2;
+    if (layerHeight === undefined) layerHeight = DEFAULT_LAYER_HEIGHT_MM;
+
     const half = size / 2;
     const F = speed * 60;
     const moves = [];

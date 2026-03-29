@@ -63,6 +63,7 @@ export class ModelLoader {
   /**
    * Removed parts are specified as a Set of part names will be ignored during loading.
    * This is useful for parts that are present in the GLB but should not be included in the simulation.
+   * @deprecated
    */
   loadModel(url, removedParts = new Set()) {
     return new Promise((resolve, reject) => {
@@ -95,33 +96,6 @@ export class ModelLoader {
     });
   }
 
-  /**
-   * Normalises the loaded model's scale and logs the bed dimensions to the console.
-   * @deprecated This method has an extreme bug that can irreversibly distort the model. Do not use until it's fixed.
-   */
-  getNormalizeModelFactor() {
-    if (!this.model) return;
-
-    const bedPart = this.model.getObjectByName("Tisch");
-    const referenceObject = bedPart || this.model;
-
-    // Measure raw size of the reference object
-    const box = new THREE.Box3().setFromObject(referenceObject);
-    const size = new THREE.Vector3();
-    box.getSize(size);
-
-    // Target bed size in meters (three.js units)
-    const targetWidth = PRINTER_CONFIG.BED.WIDTH_MM * 0.001;
-
-    // Single uniform scale factor
-    const scaleFactor = targetWidth / size.x;
-
-    console.log(
-      `Normalization factor calculated: ${scaleFactor.toFixed(4)} (target width: ${targetWidth}m, actual width: ${size.x.toFixed(4)}m)`
-    );
-    console.warn('⚠️  getNormalizeModelFactor() is deprecated and may cause irreversible distortion. Use with caution. \nscaleFactor:', scaleFactor);
-    return scaleFactor;
-  }
   // ── Part lookup ─────────────────────────────────────────────────────────────
 
   /**

@@ -17,9 +17,10 @@
 
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { PRINTER_CONFIG } from '../config/printer_config.js';
+import { SCENE_CONFIG } from '../config/scene_config.js';
 
-const { CAMERA, CONTROLS, RENDERER } = PRINTER_CONFIG.SCENE;
+
+const { CAMERA, CONTROLS, RENDERER } = SCENE_CONFIG.SCENE;
 
 // ── Scene ─────────────────────────────────────────────────────────────────────
 
@@ -30,7 +31,7 @@ const { CAMERA, CONTROLS, RENDERER } = PRINTER_CONFIG.SCENE;
  */
 export function createScene() {
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(PRINTER_CONFIG.SCENE.BACKGROUND_COLOR);
+  scene.background = new THREE.Color(SCENE_CONFIG.SCENE.BACKGROUND_COLOR);
   return scene;
 }
 
@@ -65,9 +66,9 @@ export function createCamera() {
  * @param {THREE.PerspectiveCamera} camera
  */
 export function applyLoadedCameraPosition(camera) {
-  const { LOADED_POSITION } = CAMERA;
+  const { LOADED_POSITION, LOOK_AT } = CAMERA;
   camera.position.set(LOADED_POSITION.x, LOADED_POSITION.y, LOADED_POSITION.z);
-  camera.lookAt(LOADED_POSITION.x, LOADED_POSITION.y, LOADED_POSITION.z);
+  camera.lookAt(LOOK_AT.x, LOOK_AT.y, LOOK_AT.z);
 }
 
 // ── Renderer ──────────────────────────────────────────────────────────────────

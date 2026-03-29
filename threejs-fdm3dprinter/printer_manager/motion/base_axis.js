@@ -85,6 +85,25 @@ export class BaseAxis {
   }
 
   /**
+   * Moves the axis to `position` mm using **linear** interpolation.
+   *
+   * Use this for G1 print moves where intermediate positions must lie
+   * exactly on a straight line (no easing curve that distorts the path).
+   *
+   * @param {number} position   Target position in mm.
+   * @param {number} [duration] Animation duration in ms. Default 0 (instant).
+   */
+  moveToPositionLinear(position, duration = 0) {
+    const target = this._clamp(position);
+
+    if (duration <= 0) {
+      this.setPosition(target);
+    } else {
+      this.animateToPositionLinear(target, duration);
+    }
+  }
+
+  /**
    * Teleports the axis to `position` mm with no animation.
    *
    * @param {number} position
@@ -124,6 +143,45 @@ export class BaseAxis {
         this._animationFrame = requestAnimationFrame(tick);
       } else {
         this._animationFrame = null;
+        this.currentPosition = target; // Ensure exact final value
+      }
+    };
+
+    this._animationFrame = requestAnimationFrame(tick);
+  }
+
+  /**
+   * Animates the axis from its current position to `targetPosition` mm
+   * over `duration` ms using **linear** interpolation (constant velocity).
+   *
+   * Unlike `animateToPosition()`, intermediate positions lie exactly on
+   * a straight line — essential for accurate filament rendering.
+   *
+   * @param {number} targetPosition  Clamped before use.
+   * @param {number} duration        Duration in ms.
+   */
+  animateToPositionLinear(targetPosition, duration) {
+    if (this._animationFrame !== null) {
+      cancelAnimationFrame(this._animationFrame);
+      this._animationFrame = null;
+    }
+
+    const start     = this.currentPosition;
+    const target    = this._clamp(targetPosition);
+    const startTime = Date.now();
+
+    const tick = () => {
+      const elapsed  = Date.now() - startTime;
+      const progress = Math.min(elapsed / duration, 1);
+
+      // Linear interpolation — no easing
+      this.setPosition(start + (target - start) * progress);
+
+      if (progress < 1) {
+        this._animationFrame = requestAnimationFrame(tick);
+      } else {
+        this._animationFrame = null;
+        this.currentPosition = target;
       }
     };
 
