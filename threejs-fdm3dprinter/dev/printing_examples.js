@@ -163,6 +163,16 @@ G28
   /** Logs current printing status. */
   status() { this._printer.printStatus(); }
 
+  /** Pauses the current print. */
+  pause() {
+    this._printer.pause();
+  }
+
+  /** Resumes a paused print. */
+  resume() {
+    this._printer.resume();
+  }
+
   /**
    * Stops the current print.
    * @param {boolean} [andClear=false]  Also remove partial filament if true.
@@ -172,12 +182,25 @@ G28
     if (andClear) this._filamentRenderer.clear();
   }
 
+  /** Alias for stop() */
+  abort() {
+    this.stop();
+  }
+
   /**
    * Removes the live filament line from the scene.
    * Safe to call at any time.
    */
   clear() {
     this._filamentRenderer.clear();
+  }
+
+  /**
+   * Stops, Clears bed, and Home axes.
+   * @returns {Promise<void>}
+   */
+  async reset() {
+    await this._printer.reset();
   }
 
   /**
@@ -236,6 +259,57 @@ G28
     } else {
       console.warn('Druckkopf not found.');
     }
+  }
+
+  /**
+   * Calculates the exact offset between the printed filament and the bed 
+   * by comparing their bounding boxes.
+   * 
+   * Usage: 
+   * 1. app.examples.square(0, 0, 350, 1)
+   * 2. (Wait for it to finish)
+   * 3. app.examples.calcOffset()
+   */
+  calcOffset() {
+    console.log('\n--- 📏 Nozzle Offset Calibration ---');
+    const { modelLoader } = AppContext;
+    const bed = modelLoader.findPartByName('Tisch');
+    
+    if (!bed) {
+      console.error('Tisch (bed) not found.');
+      return;
+    }
+
+    // Refresh world matrices
+    AppContext.scene.updateMatrixWorld(true);
+
+    const bedBox = new THREE.Box3().setFromObject(bed);
+    
+    // Get filament bounding box
+    const filamentGroup = this._filamentRenderer._group;
+    if (!filamentGroup || filamentGroup.children.length === 0) {
+      console.warn('❌ No filament found! Please run `app.examples.square(0, 0, 350, 1)` first, let it finish, then run `app.examples.calcOffset()`.');
+      return;
+    }
+
+    const filBox = new THREE.Box3().setFromObject(filamentGroup);
+
+    console.log(`📦 Bed World Bounds   : X[${bedBox.min.x.toFixed(4)}, ${bedBox.max.x.toFixed(4)}]  Z[${bedBox.min.z.toFixed(4)}, ${bedBox.max.z.toFixed(4)}]`);
+    console.log(`🟧 Print World Bounds : X[${filBox.min.x.toFixed(4)}, ${filBox.max.x.toFixed(4)}]  Z[${filBox.min.z.toFixed(4)}, ${filBox.max.z.toFixed(4)}]`);
+
+    // The gap between the front-left of the bed and the front-left of the print
+    const offsetXWorld = bedBox.min.x - filBox.min.x;
+    const offsetZWorld = bedBox.min.z - filBox.min.z;
+    
+    // Convert to millimeter scale
+    const suPerMm = this._filamentRenderer._bedWidthWorldUnits / 350.0; // Assuming 350mm bed
+    const offsetX_mm = offsetXWorld / suPerMm;
+    const offsetZ_mm = offsetZWorld / suPerMm;
+
+    console.log(`\n📐 Calculated Offset (World Units) : X = ${offsetXWorld.toFixed(6)}, Z = ${offsetZWorld.toFixed(6)}`);
+    console.log(`🛠️ Calculated Offset (Millimeters) : X = ${offsetX_mm.toFixed(3)} mm, Z = ${offsetZ_mm.toFixed(3)} mm`);
+    
+    console.log('\n💡 To fix this visual gap, we can subtract this offset directly from _nozzleWorldPos() in filament_renderer.js!');
   }
 
   // ── Private ─────────────────────────────────────────────────────────────────

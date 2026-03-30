@@ -30,7 +30,11 @@ const IS_DEV = true;
 // ── 1. Scene bootstrap ────────────────────────────────────────────────────────
 
 const { scene, camera, renderer, controls } = bootstrapScene();
-Object.assign(AppContext, { scene, camera, renderer, controls });
+Object.assign(AppContext, { 
+  scene, camera, renderer, controls,
+  config: PRINTER_CONFIG,
+  sceneConfig: SCENE_CONFIG
+});
 
 // ── 2. Lighting & environment ─────────────────────────────────────────────────
 

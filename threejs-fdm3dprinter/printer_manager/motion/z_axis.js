@@ -39,8 +39,8 @@ export class ZAxisMotion extends BaseAxis {
    */
   constructor(modelLoader, printerModel, modelScale = 1) {
     super(printerModel, {
-      axisName:   'Z',
-      maxTravel:  MAX_TRAVEL_MM,
+      axisName: 'Z',
+      maxTravel: MAX_TRAVEL_MM,
       modelScale,
       screwPitch: SCREW_PITCH_MM,
     });
@@ -95,13 +95,14 @@ export class ZAxisMotion extends BaseAxis {
    *             hits the U_trapezoid001 ceiling.
    * `minDelta` — how far down before Nevelierungsschalter hits the bed.
    */
+  /*
   _calculatePhysicalLimits() {
     const ceiling = this.findPartByName('U_trapezoid001');
     const clamp   = this.findPartByName('Klammernvertikal');
     const bed     = this.findPartByName('Tisch');
-    const sensor  = this.findPartByName('Nevelierungsschalter');
+    const nozzle  = this.findPartByName('Druckkopf');
 
-    if (!ceiling || !clamp || !bed || !sensor) {
+    if (!ceiling || !clamp || !bed || !nozzle) {
       console.warn('⚠️  Z-axis: missing parts for limit calculation — using defaults.');
       this._minDelta = FALLBACK_DELTA.min;
       this._maxDelta = FALLBACK_DELTA.max;
@@ -111,12 +112,52 @@ export class ZAxisMotion extends BaseAxis {
     const ceilingBox = new THREE.Box3().setFromObject(ceiling);
     const clampBox   = new THREE.Box3().setFromObject(clamp);
     const bedBox     = new THREE.Box3().setFromObject(bed);
-    const sensorBox  = new THREE.Box3().setFromObject(sensor);
+    // Nozzle tip world Y (origin of Druckkopf is the tip)
+    nozzle.updateWorldMatrix(true, false);
+    const nozzlePos = new THREE.Vector3();
+    nozzle.getWorldPosition(nozzlePos);
 
     this._maxDelta = ceilingBox.min.y - clampBox.max.y;  // upward clearance
-    this._minDelta = bedBox.max.y     - sensorBox.min.y; // downward clearance
+    this._minDelta = bedBox.max.y     - nozzlePos.y;     // downward clearance to reach bed
 
     console.log(`✅ Z-axis: limits  up=${this._maxDelta.toFixed(3)}  down=${this._minDelta.toFixed(3)} units`);
+  }*/
+
+  _calculatePhysicalLimits() {
+
+    const ceiling = this.findPartByName('U_trapezoid001');
+    const clamp = this.findPartByName('Klammernvertikal');
+    const bed = this.findPartByName('Tisch');
+    const nozzle = this.findPartByName('Druckkopf');
+
+    if (!ceiling || !clamp || !bed || !nozzle) {
+      console.warn('⚠️ Z-axis: missing parts for limit calculation — using fallback.');
+
+      this._minDelta = FALLBACK_DELTA.min;
+      this._maxDelta = FALLBACK_DELTA.max;
+      return;
+    }
+
+    const ceilingBox = new THREE.Box3().setFromObject(ceiling);
+    const clampBox = new THREE.Box3().setFromObject(clamp);
+    const bedBox = new THREE.Box3().setFromObject(bed);
+    const nozzleBox = new THREE.Box3().setFromObject(nozzle);
+
+    /**
+     * Upper limit
+     * clamp touching ceiling bracket
+     */
+    this._maxDelta = ceilingBox.min.y - clampBox.max.y;
+
+    /**
+     * Lower limit
+     * nozzle touching the bed
+     */
+    this._minDelta = bedBox.max.y - nozzleBox.min.y;
+
+    console.log(
+      `✅ Z-axis limits computed → up=${this._maxDelta.toFixed(4)} down=${this._minDelta.toFixed(4)}`
+    );
   }
 
   // ── Position update ─────────────────────────────────────────────────────────
@@ -128,7 +169,7 @@ export class ZAxisMotion extends BaseAxis {
    * @param {number} positionMm  Already clamped by BaseAxis.setPosition().
    */
   updatePartsPosition(positionMm) {
-    const t     = positionMm / this.maxTravel;
+    const t = positionMm / this.maxTravel;
     const delta = this._minDelta + t * (this._maxDelta - this._minDelta);
 
     if (this.zGroup) {

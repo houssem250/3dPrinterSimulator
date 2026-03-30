@@ -65,15 +65,16 @@ export class PrintingMotion {
     this.yAxis = yAxis;
     this.zAxis = zAxis;
 
-    this.placement       = options.placement       ?? DEFAULT_PLACEMENT;
+    this.placement = options.placement ?? DEFAULT_PLACEMENT;
     this.speedMultiplier = options.speedMultiplier ?? DEFAULT_SPEED_MULTIPLIER;
 
     this._initBedDimensions(options.modelLoader, options.bedDimensions);
 
-    this.moves      = [];
+    this.moves = [];
     this._moveIndex = 0;
-    this.isRunning  = false;
-    this.currentF   = DEFAULT_FEEDRATE_MM_MIN;
+    this.isRunning = false;
+    this.isPaused = false;
+    this.currentF = DEFAULT_FEEDRATE_MM_MIN;
 
     // G92 virtual-zero offsets
     this._offsetX = 0;
@@ -81,7 +82,7 @@ export class PrintingMotion {
     this._offsetZ = 0;
 
     // E tracking
-    this._lastE         = undefined;
+    this._lastE = undefined;
     this._retractBudget = 0;
 
     this._state = getCurrentState();
@@ -89,12 +90,12 @@ export class PrintingMotion {
     /** @type {import('../../visualization/filament_renderer.js').FilamentRenderer | null} */
     this._filamentRenderer = null;
 
-    this.onStateChange    = null;
+    this.onStateChange = null;
     this.onProgressChange = null;
-    this.onLayerChange    = null;
+    this.onLayerChange = null;
 
     this.stats = null;
-    this.path  = [];
+    this.path = [];
 
     console.log('PrintingMotion ready.');
     console.log(`   Bed: ${this.bedWidth}×${this.bedDepth} mm  |  placement: ${this.placement}`);
@@ -124,16 +125,16 @@ export class PrintingMotion {
 
   async executePath() {
     if (this.moves.length === 0) { console.warn('executePath(): no moves.'); return; }
-    if (this.isRunning)          { console.warn('executePath(): already running.'); return; }
+    if (this.isRunning) { console.warn('executePath(): already running.'); return; }
 
-    this.isRunning      = true;
-    this._moveIndex     = 0;
-    this._offsetX       = 0;
-    this._offsetY       = 0;
-    this._offsetZ       = 0;
-    this._lastE         = undefined;
+    this.isRunning = true;
+    this._moveIndex = 0;
+    this._offsetX = 0;
+    this._offsetY = 0;
+    this._offsetZ = 0;
+    this._lastE = undefined;
     this._retractBudget = 0;
-    this._state         = getCurrentState();
+    this._state = getCurrentState();
     this._state.status.isPrinting = true;
 
     this._filamentRenderer?.reset();
@@ -146,9 +147,15 @@ export class PrintingMotion {
     for (let i = 0; i < this.moves.length; i++) {
       if (!this.isRunning) break;
 
+      // ── Pause handling ────────────────────────────────────────────────
+      while (this.isPaused && this.isRunning) {
+        await this._delay(100);
+      }
+      if (!this.isRunning) break;
+
       this._moveIndex = i;
       const move = this.moves[i];
-      const cmd  = (move.cmd ?? 'G1').toUpperCase();
+      const cmd = (move.cmd ?? 'G1').toUpperCase();
 
       if (i % 500 === 0 && this.onProgressChange) {
         this.onProgressChange((i / this.moves.length) * 100);
@@ -156,9 +163,9 @@ export class PrintingMotion {
 
       // ── Slicer pseudo-commands ─────────────────────────────────────────
       if (cmd === 'SET_HEIGHT') { this._filamentRenderer?.setHeight(move.value); continue; }
-      if (cmd === 'SET_WIDTH')  { this._filamentRenderer?.setWidth(move.value);  continue; }
-      if (cmd === 'SET_LAYER')  { this.onLayerChange?.(move.value); continue; }
-      if (cmd === 'SET_TYPE')   { continue; }
+      if (cmd === 'SET_WIDTH') { this._filamentRenderer?.setWidth(move.value); continue; }
+      if (cmd === 'SET_LAYER') { this.onLayerChange?.(move.value); continue; }
+      if (cmd === 'SET_TYPE') { continue; }
 
       // ── G4: Dwell ──────────────────────────────────────────────────────
       if (cmd === 'G4') {
@@ -171,9 +178,9 @@ export class PrintingMotion {
 
       // ── G28: Home ──────────────────────────────────────────────────────
       if (cmd === 'G28') {
-        const homeX   = move.X !== undefined;
-        const homeY   = move.Y !== undefined;
-        const homeZ   = move.Z !== undefined;
+        const homeX = move.X !== undefined;
+        const homeY = move.Y !== undefined;
+        const homeZ = move.Z !== undefined;
         const homeAll = !homeX && !homeY && !homeZ;
 
         if (homeAll || homeX) { this.xAxis.moveToPosition(0, HOME_DURATION_MS); curX = 0; }
@@ -218,7 +225,7 @@ export class PrintingMotion {
 
       // ── Temperature & fan ──────────────────────────────────────────────
       if (cmd === 'M104' || cmd === 'M109') {
-        this._state.temperature.nozzle.target  = move.temp ?? 0;
+        this._state.temperature.nozzle.target = move.temp ?? 0;
         this._state.temperature.nozzle.current = move.temp ?? 0;
         this._state.status.isHeating = (cmd === 'M109');
         this._emitState();
@@ -227,7 +234,7 @@ export class PrintingMotion {
         continue;
       }
       if (cmd === 'M140' || cmd === 'M190') {
-        this._state.temperature.bed.target  = move.temp ?? 0;
+        this._state.temperature.bed.target = move.temp ?? 0;
         this._state.temperature.bed.current = move.temp ?? 0;
         this._state.status.isHeating = (cmd === 'M190');
         this._emitState();
@@ -277,9 +284,9 @@ export class PrintingMotion {
         const adjZ = targZ + this._offsetZ;
 
         // XY displacement for extrusion detection
-        const dxGcode  = adjX - (curX + this._offsetX);
-        const dyGcode  = adjY - (curY + this._offsetY);
-        const dzGcode  = adjZ - (curZ + this._offsetZ);
+        const dxGcode = adjX - (curX + this._offsetX);
+        const dyGcode = adjY - (curY + this._offsetY);
+        const dzGcode = adjZ - (curZ + this._offsetZ);
         const hasXYMov = (Math.abs(dxGcode) + Math.abs(dyGcode)) > 0.001;
 
         const duration = this._moveDuration(dxGcode, dyGcode, dzGcode);
@@ -335,11 +342,23 @@ export class PrintingMotion {
     }
 
     const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-    this.isRunning = false;
-    this._state.status.isPrinting = false;
     this.stats = { moves: this.moves.length, elapsedSeconds: parseFloat(elapsed) };
+
+    // ── Cleanup state ──────────────────────────────────────────────────
+    this.isRunning = false;
+    this.isPaused = false;
+    this._state.status.isPrinting = false;
+    this._state.status.isPaused = false;
+
     this._emitState();
     this.onProgressChange?.(100);
+
+    if (this._moveIndex === this.moves.length - 1) {
+      console.log('🎉 Printing complete!');
+    } else {
+      console.log(`Print stopped at move ${this._moveIndex + 1} / ${this.moves.length}`);
+    }
+
     console.log(`Done: ${this.moves.length} moves in ${elapsed}s`);
   }
 
@@ -353,12 +372,12 @@ export class PrintingMotion {
    * @param {boolean} hasXYMov  true if the move has XY displacement
    */
   _isExtruding(cmd, move, hasXYMov) {
-    if (cmd === 'G0')             return false;  // rapid — never extrudes
-    if (move.E === undefined)     return false;  // no E parameter
-    if (!hasXYMov)                return false;  // pure retract / un-retract
+    if (cmd === 'G0') return false;  // rapid — never extrudes
+    if (move.E === undefined) return false;  // no E parameter
+    if (!hasXYMov) return false;  // pure retract / un-retract
 
     const eDelta = move.E - (this._lastE ?? move.E);
-    if (eDelta <= 0)              return false;  // retracting during XY move
+    if (eDelta <= 0) return false;  // retracting during XY move
 
     // Un-retract budget: consumed by G1 moves that un-retract after G92 reset
     if (this._retractBudget > 0) return false;
@@ -366,10 +385,88 @@ export class PrintingMotion {
     return true;
   }
 
+  /** Pauses the current print. Loop stays alive but waits. */
+  pause() {
+    if (!this.isRunning) {
+      console.warn('pause(): Cannot pause because no print is currently running.');
+      return;
+    }
+    if (this.isPaused) {
+      console.warn('pause(): Print is already paused.');
+      return;
+    }
+
+    this.isPaused = true;
+    this._state.status.isPaused = true;
+    this._emitState();
+    console.log('Printing paused.');
+  }
+
+  /** Resumes a paused print. */
+  resume() {
+    if (!this.isRunning) {
+      console.warn('resume(): Cannot resume because no print is active.');
+      return;
+    }
+    if (!this.isPaused) {
+      console.warn('resume(): Print is not paused.');
+      return;
+    }
+
+    this.isPaused = false;
+    this._state.status.isPaused = false;
+    this._emitState();
+    console.log('Printing resumed.');
+  }
+
+  /** Alias for stop() */
+  abort() {
+    this.stop();
+  }
+
+  /** Stops the print and clears the running state. */
   stop() {
-    if (!this.isRunning) return;
+    if (!this.isRunning) {
+      console.warn('stop(): No active print to stop.');
+      return;
+    }
+
     this.isRunning = false;
-    console.log(`Stopped at move ${this._moveIndex}.`);
+    this.isPaused = false;
+    this._state.status.isPrinting = false;
+    this._state.status.isPaused = false;
+    this._emitState();
+    console.log(`Stopped at move ${this._moveIndex + 1}.`);
+  }
+
+  /**
+   * Reset command: Stop, Clear bed, and Home axes.
+   * Returns a promise that resolves when homing is complete.
+   */
+  async reset() {
+    this.stop();
+    this._filamentRenderer?.clear();
+
+    console.log('Resetting printer...');
+
+    // Homed is cleared during reset until G28 completes
+    this._state.status.isHomed = false;
+    this._emitState();
+
+    // High speed home
+    this.xAxis.moveToPosition(0, HOME_DURATION_MS);
+    this.yAxis.moveToPosition(0, HOME_DURATION_MS);
+    this.zAxis.moveToPosition(0, HOME_DURATION_MS);
+
+    await this._delay(HOME_DURATION_MS + HOME_SETTLE_MS);
+
+    this.xAxis.setPosition(0);
+    this.yAxis.setPosition(0);
+    this.zAxis.setPosition(0);
+
+    this._state.status.isHomed = true;
+    this._emitState();
+    console.log('Printer reset and homed.');
   }
 
   // ── Filament renderer ───────────────────────────────────────────────────────
@@ -396,12 +493,12 @@ export class PrintingMotion {
 
   getStatus() {
     return {
-      isRunning:       this.isRunning,
-      totalMoves:      this.moves.length,
-      currentMove:     this._moveIndex,
-      progress:        this.moves.length > 0
+      isRunning: this.isRunning,
+      totalMoves: this.moves.length,
+      currentMove: this._moveIndex,
+      progress: this.moves.length > 0
         ? ((this._moveIndex / this.moves.length) * 100).toFixed(1) + '%' : '0%',
-      feedrateMmMin:   this.currentF,
+      feedrateMmMin: this.currentF,
       speedMultiplier: this.speedMultiplier,
       positions: {
         x: this.xAxis.getPosition(),
@@ -409,8 +506,8 @@ export class PrintingMotion {
         z: this.zAxis.getPosition(),
       },
       temperature: this._state.temperature,
-      cooling:     this._state.cooling,
-      lastStats:   this.stats,
+      cooling: this._state.cooling,
+      lastStats: this.stats,
     };
   }
 
@@ -434,11 +531,11 @@ export class PrintingMotion {
     if (loader) {
       const bedMesh = loader.findPartByName?.('Tisch');
       if (bedMesh) {
-        const box  = new THREE.Box3().setFromObject(bedMesh);
+        const box = new THREE.Box3().setFromObject(bedMesh);
         const size = new THREE.Vector3();
         box.getSize(size);
-        this.bedWidth     = (size.x) * 1000;   // scene-units → mm
-        this.bedDepth     = (size.z) * 1000;   // scene-units → mm
+        this.bedWidth = (size.x) * 1000;   // scene-units → mm
+        this.bedDepth = (size.z) * 1000;   // scene-units → mm
         this.bedWorldXMin = box.min.x;
         this.bedWorldZMin = box.min.z;
         console.log(
@@ -449,8 +546,8 @@ export class PrintingMotion {
       }
     }
     // Fallback: use config values (updated for 350×350 bed)
-    this.bedWidth     = manualDims?.width ?? PRINTER_CONFIG.hardware.bed.width;
-    this.bedDepth     = manualDims?.depth ?? PRINTER_CONFIG.hardware.bed.depth;
+    this.bedWidth = manualDims?.width ?? PRINTER_CONFIG.hardware.bed.width;
+    this.bedDepth = manualDims?.depth ?? PRINTER_CONFIG.hardware.bed.depth;
     this.bedWorldXMin = 0;
     this.bedWorldZMin = 0;
     console.log(`Bed from config: ${this.bedWidth}×${this.bedDepth} mm`);
@@ -462,14 +559,14 @@ export class PrintingMotion {
   _mapX(gcodeX) {
     let v = gcodeX;
     if (this.placement === 'center') v += this.bedWidth / 2;
-    return (Math.max(0, Math.min(v, this.bedWidth))  / this.bedWidth)  * this.xAxis.maxTravel;
+    return (Math.max(0, Math.min(v, this.bedWidth)) / this.bedWidth) * this.xAxis.maxTravel;
   }
 
   /** G-code Y (mm) → axis motor position (mm) */
   _mapY(gcodeY) {
     let v = gcodeY;
     if (this.placement === 'center') v += this.bedDepth / 2;
-    return (Math.max(0, Math.min(v, this.bedDepth))  / this.bedDepth)  * this.yAxis.maxTravel;
+    return (Math.max(0, Math.min(v, this.bedDepth)) / this.bedDepth) * this.yAxis.maxTravel;
   }
 
   /** G-code Z (mm) → axis motor position (mm, 1:1) */
@@ -482,16 +579,16 @@ export class PrintingMotion {
   _moveDuration(dx, dy, dz) {
     // Ensure we account for actual travel distance and minimum move time
     // even if distance is very small (to prevent instant moves that break animation)
-    const dist     = Math.sqrt(dx * dx + dy * dy + dz * dz);
+    const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
     if (dist < 0.001) {
       // Minimal move — still needs some time for animations to complete
       return Math.max(MIN_MOVE_DURATION_MS, 20);
     }
-    
+
     // Convert feedrate from mm/min to mm/ms for accurate timing
-    const speedMmS  = (this.currentF / 60) * this.speedMultiplier;
+    const speedMmS = (this.currentF / 60) * this.speedMultiplier;
     const speedMmMs = speedMmS / 1000;
-    
+
     // Ensure minimum duration for animation to be visible
     const calculatedDuration = (dist / speedMmMs);
     return Math.max(MIN_MOVE_DURATION_MS, calculatedDuration);
@@ -500,7 +597,7 @@ export class PrintingMotion {
   _syncLegacyPath() {
     this.path = this.moves
       .filter((m) => m.cmd === 'G0' || m.cmd === 'G1')
-      .map((m)   => ({ x: m.X ?? 0, y: m.Y ?? 0, z: m.Z ?? 0 }));
+      .map((m) => ({ x: m.X ?? 0, y: m.Y ?? 0, z: m.Z ?? 0 }));
   }
 
   _delay(ms) { return new Promise((r) => setTimeout(r, ms)); }
