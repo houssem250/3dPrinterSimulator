@@ -1,0 +1,17 @@
+{
+  "name": "threejs-fdm3dprinter",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "devDependencies": {
+    "vite": "^5.4.21"
+  },
+  "dependencies": {
+    "three": "^0.183.2"
+  }
+}
