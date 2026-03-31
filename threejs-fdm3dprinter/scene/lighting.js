@@ -18,7 +18,7 @@ import * as THREE from 'three';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 // Kept local — these are aesthetic tuning knobs, not printer-physics constants,
-// so they live beside the code that uses them rather than in printer_config.js.
+// so they live beside the code that uses them rather than in SCENE_CONFIG.js.
 
 const AMBIENT = {
   COLOR:     0xffffff,
@@ -102,7 +102,7 @@ function _makeDirectionalLight() {
   light.castShadow     = true;
   light.receiveShadow  = true;
 
-  const { SHADOW_MAP_SIZE } = /** @type {import('../config/printer_config.js').PrinterConfig['SCENE']['RENDERER']} */ (
+  const { SHADOW_MAP_SIZE } = /** @type {import('../config/SCENE_CONFIG.js').PrinterConfig['SCENE']['RENDERER']} */ (
     { SHADOW_MAP_SIZE: 2048 }
   );
   light.shadow.mapSize.width  = SHADOW_MAP_SIZE;

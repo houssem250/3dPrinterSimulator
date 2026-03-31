@@ -7,18 +7,6 @@
  * `import()` when `IS_DEV = true` in `main.js`, so it is never bundled
  * into a production build.
  *
- * What changed from the original
- * ───────────────────────────────
- *  - `where()` now uses `AppContext` to reach `modelLoader` instead of
- *    referencing the bare global `modelLoader` (which no longer exists).
- *  - `ModelDebugger` is wired in so `dbg()` exposes all inspection tools
- *    via a single accessor rather than reaching into `modelLoader.debugMode`.
- *  - `startLiveVisualization` calls replaced with `FilamentRenderer` usage
- *    via `printer.setFilamentRenderer()`.
- *  - Path generators (`generateSquarePath`, `generateCirclePath`) now come
- *    from `gcode/path_generators.js` instead of living on the printer object.
- *  - All `window.printer` / `window.scene` accesses go through `AppContext`.
- *
  * Usage (browser console)
  * ───────────────────────
  *   app.examples.square()
@@ -91,30 +79,21 @@ export class PrintingExamples {
 
   // ── Built-in print examples ─────────────────────────────────────────────────
 
-  /** Prints a square at (startX, startY) with given side length and layers. */
-  square(startX = 50, startY = 50, size = 100, layers = 2) {
+  /** Prints a square at default centre with given side length and layers. */
+  square(startX = undefined, startY = undefined, size = 40, layers = 2) {
     const moves = PathGenerators.square(startX, startY, size, layers);
     this._runMoves(moves);
   }
 
-  /** Prints a circle centred at (cx, cy) with given radius and layers. */
-  circle(cx = 150, cy = 150, radius = 60, layers = 2) {
+  /** Prints a circle at default centre with given radius and layers. */
+  circle(cx = undefined, cy = undefined, radius = 30, layers = 2) {
     const moves = PathGenerators.circle(cx, cy, radius, layers);
     this._runMoves(moves);
   }
-
-  /**
-   * Prints a hollow calibration tower — use this to verify all three axes
-   * move correctly and layers stack cleanly.
-   *
-   *  Watch for:
-   *   Walls aligned layer-to-layer   → X and Y correct
-   *   Each layer above the previous  → Z correct
-   *   Square is square (not rect)    → X and Y scales match
-   */
-  tower(cx = 150, cy = 150, size = 40, layers = 10, layerHeight = 0.3, speed = 40) {
+  /** Print a calibration tower at default centre */
+  tower(cx = undefined, cy = undefined, size = 40, layers = 10, layerHeight = undefined, speed = 40) {
     const moves = PathGenerators.tower(cx, cy, size, layers, layerHeight, speed);
-    console.log(`Tower: center=(${cx},${cy}) size=${size} mm  layers=${layers}  height=${(layers * layerHeight).toFixed(2)} mm`);
+    console.log(`Tower: size=${size} mm  layers=${layers}  height=${(layers * (layerHeight||0.2)).toFixed(2)} mm`);
     this._runMoves(moves);
   }
 
@@ -184,6 +163,16 @@ G28
   /** Logs current printing status. */
   status() { this._printer.printStatus(); }
 
+  /** Pauses the current print. */
+  pause() {
+    this._printer.pause();
+  }
+
+  /** Resumes a paused print. */
+  resume() {
+    this._printer.resume();
+  }
+
   /**
    * Stops the current print.
    * @param {boolean} [andClear=false]  Also remove partial filament if true.
@@ -193,12 +182,25 @@ G28
     if (andClear) this._filamentRenderer.clear();
   }
 
+  /** Alias for stop() */
+  abort() {
+    this.stop();
+  }
+
   /**
    * Removes the live filament line from the scene.
    * Safe to call at any time.
    */
   clear() {
     this._filamentRenderer.clear();
+  }
+
+  /**
+   * Stops, Clears bed, and Home axes.
+   * @returns {Promise<void>}
+   */
+  async reset() {
+    await this._printer.reset();
   }
 
   /**
@@ -257,6 +259,57 @@ G28
     } else {
       console.warn('Druckkopf not found.');
     }
+  }
+
+  /**
+   * Calculates the exact offset between the printed filament and the bed 
+   * by comparing their bounding boxes.
+   * 
+   * Usage: 
+   * 1. app.examples.square(0, 0, 350, 1)
+   * 2. (Wait for it to finish)
+   * 3. app.examples.calcOffset()
+   */
+  calcOffset() {
+    console.log('\n--- 📏 Nozzle Offset Calibration ---');
+    const { modelLoader } = AppContext;
+    const bed = modelLoader.findPartByName('Tisch');
+    
+    if (!bed) {
+      console.error('Tisch (bed) not found.');
+      return;
+    }
+
+    // Refresh world matrices
+    AppContext.scene.updateMatrixWorld(true);
+
+    const bedBox = new THREE.Box3().setFromObject(bed);
+    
+    // Get filament bounding box
+    const filamentGroup = this._filamentRenderer._group;
+    if (!filamentGroup || filamentGroup.children.length === 0) {
+      console.warn('❌ No filament found! Please run `app.examples.square(0, 0, 350, 1)` first, let it finish, then run `app.examples.calcOffset()`.');
+      return;
+    }
+
+    const filBox = new THREE.Box3().setFromObject(filamentGroup);
+
+    console.log(`📦 Bed World Bounds   : X[${bedBox.min.x.toFixed(4)}, ${bedBox.max.x.toFixed(4)}]  Z[${bedBox.min.z.toFixed(4)}, ${bedBox.max.z.toFixed(4)}]`);
+    console.log(`🟧 Print World Bounds : X[${filBox.min.x.toFixed(4)}, ${filBox.max.x.toFixed(4)}]  Z[${filBox.min.z.toFixed(4)}, ${filBox.max.z.toFixed(4)}]`);
+
+    // The gap between the front-left of the bed and the front-left of the print
+    const offsetXWorld = bedBox.min.x - filBox.min.x;
+    const offsetZWorld = bedBox.min.z - filBox.min.z;
+    
+    // Convert to millimeter scale
+    const suPerMm = this._filamentRenderer._bedWidthWorldUnits / 350.0; // Assuming 350mm bed
+    const offsetX_mm = offsetXWorld / suPerMm;
+    const offsetZ_mm = offsetZWorld / suPerMm;
+
+    console.log(`\n📐 Calculated Offset (World Units) : X = ${offsetXWorld.toFixed(6)}, Z = ${offsetZWorld.toFixed(6)}`);
+    console.log(`🛠️ Calculated Offset (Millimeters) : X = ${offsetX_mm.toFixed(3)} mm, Z = ${offsetZ_mm.toFixed(3)} mm`);
+    
+    console.log('\n💡 To fix this visual gap, we can subtract this offset directly from _nozzleWorldPos() in filament_renderer.js!');
   }
 
   // ── Private ─────────────────────────────────────────────────────────────────
