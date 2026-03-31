@@ -1,172 +1,211 @@
-import { BaseAxis } from './base_axis.js';
-import * as THREE from 'three';
-
 /**
- * X-Axis Motion — print-head carriage LEFT ↔ RIGHT
+ * @file x_axis.js
+ * @description X-axis motion — print-head carriage left ↔ right.
  *
- * ─── How it moves ─────────────────────────────────────────────────────────
- *  The X_axis GROUP (confirmed in Blender hierarchy) is a child of Z_axis.
- *  Moving X_axis.position.x slides the entire carriage assembly together —
- *  no need to touch individual parts.
+ * How it moves
+ * ────────────
+ * `X_axis` is a GROUP that is a direct child of `Z_axis` in the Blender
+ * hierarchy. Setting `X_axis.position.x` slides the entire carriage assembly
+ * in one operation — no need to touch individual child parts.
  *
- * ─── Travel limits (roller-based) ────────────────────────────────────────
- *  GalgenHorizontral carries two static end-stop rollers called 'Rollen'
- *  (one at each end, both children of Z_axis).
- *  The carriage has its own roller 'RollenGondel' (child of X_axis).
+ * Travel limits (roller-based)
+ * ────────────────────────────
+ * `GalgenHorizontral` carries two static end-stop rollers named `Rollen`
+ * (children of `Z_axis`, one at each end).
+ * The carriage has its own roller `RollenGondel` (child of `X_axis`).
  *
- *  Physical rule:
- *    LEFT  limit  → RollenGondel right edge  touches left  Rollen left edge
- *    RIGHT limit  → RollenGondel left  edge  touches right Rollen right edge
+ * Physical rule:
+ *   LEFT  limit → RollenGondel right edge touches left  Rollen left  edge
+ *   RIGHT limit → RollenGondel left  edge touches right Rollen right edge
  *
- *  We read both Rollen world-X positions, subtract the carriage roller width,
- *  and that gives the exact visual travel range.
+ * We read both Rollen world-X positions, subtract the carriage roller's
+ * half-width, and that gives the exact visual travel range.
  *
- * ─── Coordinate note ──────────────────────────────────────────────────────
- *  X_axis is a LOCAL child of Z_axis.
- *  position.x on X_axis is LOCAL to Z_axis — not world X.
- *  All bounding boxes must be converted to Z_axis LOCAL space before use,
- *  or we must work purely in world space and convert back.
- *  Here we work in world space and convert the final target back to local.
+ * Coordinate note
+ * ───────────────
+ * `X_axis.position.x` is LOCAL to `Z_axis`. All bounding box work is done
+ * in world space, then converted back to `Z_axis` local space for the final
+ * position assignment.
+ *
+ * @module printer_manager/motion/x_axis
  */
+
+import * as THREE from 'three';
+import { BaseAxis } from './base_axis.js';
+import { PRINTER_CONFIG } from '../../config/printer_config.js';
+
+const { MAX_TRAVEL_MM, SCREW_PITCH_MM } = PRINTER_CONFIG.AXES.X;
+
 export class XAxisMotion extends BaseAxis {
-    constructor(modelLoader, printerModel, modelScale = 1) {
-        super(printerModel, {
-            axisName: 'X',
-            maxTravel: 300,
-            modelScale: modelScale,
-            screwPitch: 8
-        });
 
-        this.modelLoader = modelLoader;
+  /**
+   * @param {import('../../model/model_loader.js').ModelLoader} modelLoader
+   * @param {THREE.Group} printerModel
+   * @param {number}      modelScale
+   */
+  constructor(modelLoader, printerModel, modelScale = 1) {
+    super(printerModel, {
+      axisName:   'X',
+      maxTravel:  MAX_TRAVEL_MM,
+      modelScale,
+      screwPitch: SCREW_PITCH_MM,
+    });
 
-        // The group to move — confirmed child of Z_axis in Blender
-        this.xGroup = this.findPartByName('X_axis');
+    this.modelLoader = modelLoader;
 
-        if (!this.xGroup) {
-            console.error('❌ X-Axis: X_axis group not found. Check GLB export.');
-            return;
-        }
+    // The group to move — confirmed child of Z_axis in Blender
+    this.xGroup = this.findPartByName('X_axis');
 
-        // Parts used for limit calculation (NOT moved — just measured)
-        this.galgenHorizontral = this.findPartByName('GalgenHorizontral');
-        this.trapezoidScrewX   = this.findPartByName('trapezoid_screwX000');
-
-        // RollenGondel = carriage roller (child of X_axis, moves with it)
-        this.rollenGondel = this.findPartByName('RollenGondel');
-
-        // Rollen = static end-stop roller (child of Z_axis, does NOT move with carriage)
-        // There are two — we identify them by world X position (left vs right)
-        this.calculateLimits();
-
-        console.log(`✅ X-Axis: group found with ${this.xGroup.children.length} children`);
+    if (!this.xGroup) {
+      console.error('X-axis: X_axis group not found — check GLB export.');
+      return;
     }
 
-    // ─── Limit Calculation ────────────────────────────────────────────────────
+    // Parts used only for limit calculation (never moved directly)
+    this.galgenHorizontral = this.findPartByName('GalgenHorizontral');
+    this.trapezoidScrewX   = this.findPartByName('trapezoid_screwX000');
+    this.rollenGondel      = this.findPartByName('RollenGondel');
 
-    calculateLimits() {
-        if (!this.xGroup || !this.rollenGondel) {
-            console.warn('⚠️ X-Axis: cannot calculate limits — missing xGroup or RollenGondel');
-            this.worldMinX = -0.5;
-            this.worldMaxX =  0.5;
-            return;
-        }
+    this._calculateLimits();
 
-        // --- Carriage roller size (world space) ---
-        const rollenBox  = new THREE.Box3().setFromObject(this.rollenGondel);
-        const rollenSize = new THREE.Vector3();
-        rollenBox.getSize(rollenSize);
-        const rollenHalfWidth = rollenSize.x / 2;
+    console.log(`✅ X-axis: group found — ${this.xGroup.children.length} children`);
+  }
 
-        // --- Find the two static end-stop Rollen by world X position ---
-        // 'Rollen' is the name used in the Blender hierarchy (child of Z_axis)
-        // There may be multiple objects with this name — collect all of them.
-        const stopRollers = [];
-        this.printerModel.traverse(child => {
-            if (child.name === 'Rollen' && child !== this.rollenGondel) {
-                const b = new THREE.Box3().setFromObject(child);
-                stopRollers.push(b);
-            }
-        });
+  // ── Limit calculation ───────────────────────────────────────────────────────
 
-        if (stopRollers.length < 2) {
-            // Fallback: use GalgenHorizontral rail extents
-            console.warn('⚠️ X-Axis: fewer than 2 Rollen found — falling back to rail limits');
-            if (this.galgenHorizontral) {
-                const railBox  = new THREE.Box3().setFromObject(this.galgenHorizontral);
-                this.worldMinX = railBox.min.x + rollenHalfWidth;
-                this.worldMaxX = railBox.max.x - rollenHalfWidth;
-            } else {
-                this.worldMinX = -0.5;
-                this.worldMaxX =  0.5;
-            }
-        } else {
-            // Sort by world X — first is left stop, last is right stop
-            stopRollers.sort((a, b) => a.min.x - b.min.x);
-            const leftStop  = stopRollers[0];
-            const rightStop = stopRollers[stopRollers.length - 1];
-
-            // Carriage roller right edge touches left stop's left edge
-            // → carriage roller centre at: leftStop.min.x + rollenHalfWidth
-            this.worldMinX = leftStop.min.x + rollenHalfWidth;
-
-            // Carriage roller left edge touches right stop's right edge
-            // → carriage roller centre at: rightStop.max.x - rollenHalfWidth
-            this.worldMaxX = rightStop.max.x - rollenHalfWidth;
-        }
-
-        // Convert world X limits → X_axis LOCAL X limits
-        // X_axis is a child of Z_axis; get Z_axis world matrix to invert
-        const zAxisGroup = this.xGroup.parent;
-        if (zAxisGroup) {
-            const invWorld = new THREE.Matrix4().copy(zAxisGroup.matrixWorld).invert();
-            const localMin = new THREE.Vector3(this.worldMinX, 0, 0).applyMatrix4(invWorld);
-            const localMax = new THREE.Vector3(this.worldMaxX, 0, 0).applyMatrix4(invWorld);
-            this.localMinX = localMin.x;
-            this.localMaxX = localMax.x;
-        } else {
-            // No parent transform — world == local
-            this.localMinX = this.worldMinX;
-            this.localMaxX = this.worldMaxX;
-        }
-
-        console.log(`🛡️ X-Axis limits:`);
-        console.log(`   World  X: ${this.worldMinX.toFixed(4)}  →  ${this.worldMaxX.toFixed(4)}`);
-        console.log(`   Local  X: ${this.localMinX.toFixed(4)}  →  ${this.localMaxX.toFixed(4)}`);
-        console.log(`   Visual travel: ${(this.localMaxX - this.localMinX).toFixed(4)} units`);
+  /**
+   * Computes `localMinX` and `localMaxX` from the physical roller positions.
+   * Falls back to the rail extents if fewer than 2 end-stop rollers are found.
+   */
+  _calculateLimits() {
+    if (!this.xGroup || !this.rollenGondel) {
+      console.warn('X-axis: cannot calculate limits — missing xGroup or RollenGondel.');
+      this.localMinX = -0.5;
+      this.localMaxX =  0.5;
+      return;
     }
 
-    // ─── Position Update ──────────────────────────────────────────────────────
+    const rollenHalfWidth = this._getCarriageRollerHalfWidth();
+    const stopRollers     = this._collectEndStopRollers();
 
-    updatePartsPosition(xPosition) {
-        if (!this.xGroup) return;
-
-        // 1. CLAMP mm to valid range
-        const safeX = Math.max(0, Math.min(xPosition, this.maxTravel));
-
-        // 2. MAP mm [0 … maxTravel] → local X [localMinX … localMaxX]
-        const t      = safeX / this.maxTravel;
-        const localX = this.localMinX + t * (this.localMaxX - this.localMinX);
-
-        // 3. MOVE the whole group — one line, everything stays together
-        this.xGroup.position.x = localX;
-
-        // 4. ROTATE the lead screw
-        if (this.trapezoidScrewX) {
-            this.trapezoidScrewX.rotation.x = (safeX / this.screwPitch) * Math.PI * 2;
-        }
-
-        this.currentPosition = safeX;
+    if (stopRollers.length < 2) {
+      this._applyRailFallbackLimits(rollenHalfWidth);
+    } else {
+      this._applyRollerLimits(stopRollers, rollenHalfWidth);
     }
 
-    // ─── Timeline ─────────────────────────────────────────────────────────────
+    this._convertWorldLimitsToLocal();
 
-    setTimeline(timelineKeyframes) {
-        this.timeline = timelineKeyframes.sort((a, b) => a.time - b.time);
-        console.log('X-Axis timeline set with', this.timeline.length, 'keyframes');
+    console.log(`   X-axis limits  world: ${this.worldMinX.toFixed(4)} → ${this.worldMaxX.toFixed(4)}`);
+    console.log(`                  local: ${this.localMinX.toFixed(4)} → ${this.localMaxX.toFixed(4)}`);
+    console.log(`                  travel: ${(this.localMaxX - this.localMinX).toFixed(4)} units`);
+  }
+
+  /** @returns {number} Half the world-space width of the carriage roller. */
+  _getCarriageRollerHalfWidth() {
+    const box  = new THREE.Box3().setFromObject(this.rollenGondel);
+    const size = new THREE.Vector3();
+    box.getSize(size);
+    return size.x / 2;
+  }
+
+  /**
+   * Collects all `Rollen` objects that are NOT the carriage roller.
+   * @returns {THREE.Box3[]}
+   */
+  _collectEndStopRollers() {
+    const boxes = [];
+    this.printerModel.traverse((child) => {
+      if (child.name === 'Rollen' && child !== this.rollenGondel) {
+        boxes.push(new THREE.Box3().setFromObject(child));
+      }
+    });
+    return boxes;
+  }
+
+  /**
+   * Falls back to using `GalgenHorizontral` rail extents when end-stop
+   * rollers cannot be found.
+   *
+   * @param {number} rollenHalfWidth
+   */
+  _applyRailFallbackLimits(rollenHalfWidth) {
+    console.warn('X-axis: fewer than 2 Rollen found — falling back to rail limits.');
+    if (this.galgenHorizontral) {
+      const railBox = new THREE.Box3().setFromObject(this.galgenHorizontral);
+      this.worldMinX = railBox.min.x + rollenHalfWidth;
+      this.worldMaxX = railBox.max.x - rollenHalfWidth;
+    } else {
+      this.worldMinX = -0.5;
+      this.worldMaxX =  0.5;
     }
+  }
 
-    // ─── Helpers ──────────────────────────────────────────────────────────────
+  /**
+   * Sets world limits from the two outermost end-stop roller boxes.
+   *
+   * @param {THREE.Box3[]} stopRollers
+   * @param {number}       rollenHalfWidth
+   */
+  _applyRollerLimits(stopRollers, rollenHalfWidth) {
+    stopRollers.sort((a, b) => a.min.x - b.min.x);
+    const leftStop  = stopRollers[0];
+    const rightStop = stopRollers[stopRollers.length - 1];
 
-    isAtLeftLimit()  { return this.currentPosition <= 0; }
-    isAtRightLimit() { return this.currentPosition >= this.maxTravel; }
+    // Carriage roller centre when touching the left stop
+    this.worldMinX = leftStop.min.x + rollenHalfWidth;
+    // Carriage roller centre when touching the right stop
+    this.worldMaxX = rightStop.max.x - rollenHalfWidth;
+  }
+
+  /**
+   * Converts `worldMinX` / `worldMaxX` into local X coordinates relative
+   * to the Z_axis parent transform.
+   */
+  _convertWorldLimitsToLocal() {
+    const zAxisGroup = this.xGroup.parent;
+
+    if (zAxisGroup) {
+      const invWorld = new THREE.Matrix4().copy(zAxisGroup.matrixWorld).invert();
+      const localMin = new THREE.Vector3(this.worldMinX, 0, 0).applyMatrix4(invWorld);
+      const localMax = new THREE.Vector3(this.worldMaxX, 0, 0).applyMatrix4(invWorld);
+      this.localMinX = localMin.x;
+      this.localMaxX = localMax.x;
+    } else {
+      // No parent transform — world == local
+      this.localMinX = this.worldMinX;
+      this.localMaxX = this.worldMaxX;
+    }
+  }
+
+  // ── Position update ─────────────────────────────────────────────────────────
+
+  /**
+   * Maps `positionMm` → local X and moves the carriage group.
+   * Also rotates the lead screw proportionally.
+   *
+   * @param {number} positionMm  Already clamped by BaseAxis.setPosition().
+   */
+  updatePartsPosition(positionMm) {
+    if (!this.xGroup) return;
+
+    // Map mm [0 … maxTravel] → local X [localMinX … localMaxX]
+    const t      = positionMm / this.maxTravel;
+    const localX = this.localMinX + t * (this.localMaxX - this.localMinX);
+
+    this.xGroup.position.x = localX;
+
+    // Rotate lead screw: full rotation per screwPitch mm of travel
+    if (this.trapezoidScrewX) {
+      this.trapezoidScrewX.rotation.x = (positionMm / this.screwPitch) * Math.PI * 2;
+    }
+  }
+
+  // ── Convenience predicates ──────────────────────────────────────────────────
+
+  /** @returns {boolean} True when the carriage is at or below position 0. */
+  isAtLeftLimit()  { return this.currentPosition <= 0; }
+
+  /** @returns {boolean} True when the carriage is at or above maxTravel. */
+  isAtRightLimit() { return this.currentPosition >= this.maxTravel; }
 }
