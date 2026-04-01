@@ -24,6 +24,7 @@ import { FilamentRenderer } from './visualization/filament_renderer.js';
 import { PRINTER_CONFIG } from './config/printer_config.js';
 import { SCENE_CONFIG } from './config/scene_config.js';
 import { AppContext } from './app_context.js';
+import { MQTTSubscriber, StreamSimulator } from './stream/index.js';
 
 const IS_DEV = true;
 
@@ -87,6 +88,11 @@ modelLoader.loadModel(PRINTER_CONFIG.MODEL.PATH, removedParts).then((printerMode
   printer.setFilamentRenderer(filament);
   AppContext.filament = filament;
 
+  // ── 4e. Initialise Stream Mode ───────────────────────────────────────
+  const subscriber = new MQTTSubscriber();
+  const streamSimulator = new StreamSimulator(subscriber);
+  AppContext.stream = streamSimulator;
+
   // ── 5. Dev tools ─────────────────────────────────────────────────────────
   if (IS_DEV) {
     import('./dev/printing_examples.js').then(({ PrintingExamples }) => {
@@ -101,6 +107,11 @@ modelLoader.loadModel(PRINTER_CONFIG.MODEL.PATH, removedParts).then((printerMode
     console.log('   app.xAxis.moveToPosition(150, 1000)');
     console.log('   app.printer.printStatus()');
     console.log('   app.filament.clear()');
+    console.log('');
+    console.log('💾 Stream mode:');
+    console.log('   await app.stream.start()');
+    console.log('   await app.stream.stop()');
+    console.log('   app.stream.isActive()');
   }
 
   console.log('✅ Printer simulation ready.');

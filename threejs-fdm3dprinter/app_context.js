@@ -44,8 +44,16 @@
  * @property {import('./printer_manager/motion/y_axis.js').YAxisMotion | null} yAxis
  * @property {import('./printer_manager/motion/z_axis.js').ZAxisMotion | null} zAxis
  *
- * Printing
+ * Printing & Visualization
  * @property {import('./printer_manager/motion/printing_motion.js').PrintingMotion | null} printer
+ * @property {import('./visualization/filament_renderer.js').FilamentRenderer | null} filament
+ *
+ * Stream mode (real-time MQTT updates)
+ * @property {import('./stream/stream_simulator.js').StreamSimulator | null} stream
+ *
+ * Configuration
+ * @property {object} config PRINTER_CONFIG from config/printer_config.js
+ * @property {object} sceneConfig SCENE_CONFIG from config/scene_config.js
  *
  * Dev tools (only populated when running in dev mode)
  * @property {import('./dev/printing_examples.js').PrintingExamples | null} examples
@@ -54,22 +62,30 @@
 /** @type {IAppContext} */
 export const AppContext = {
   // Three.js core
-  scene:       null,
-  camera:      null,
-  renderer:    null,
-  controls:    null,
+  scene:        null,
+  camera:       null,
+  renderer:     null,
+  controls:     null,
 
   // Model
-  modelLoader: null,
+  modelLoader:  null,
 
   // Axes
-  xAxis:       null,
-  yAxis:       null,
-  zAxis:       null,
+  xAxis:        null,
+  yAxis:        null,
+  zAxis:        null,
 
-  // Printing
-  printer:     null,
+  // Printing & Visualization
+  printer:      null,
+  filament:     null,
+
+  // Stream mode
+  stream:       null,
+
+  // Configuration
+  config:       null,
+  sceneConfig:  null,
 
   // Dev
-  examples:    null,
+  examples:     null,
 };

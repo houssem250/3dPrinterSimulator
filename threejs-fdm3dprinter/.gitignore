@@ -12,6 +12,21 @@ dist
 dist-ssr
 *.local
 
+# Environment variables (NEVER commit sensitive data)
+.env
+.env.local
+.env.*.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# API Keys, credentials, secrets
+*.key
+*.pem
+*.secret
+credentials.json
+secrets.json
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
