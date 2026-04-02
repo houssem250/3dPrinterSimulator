@@ -13,7 +13,7 @@ export class StreamProvider extends BaseProvider {
    * @param {import('../core/FrameNormalizer.js').FrameNormalizer} normalizer
    * @param {number} bufferDelayMs Time to delay playback for jitter smoothing.
    */
-  constructor(normalizer, bufferDelayMs = 250) {
+  constructor(normalizer, bufferDelayMs = 120) {
     super(normalizer);
     this.name = 'StreamProvider';
     this.bufferDelayMs = bufferDelayMs;
@@ -24,7 +24,6 @@ export class StreamProvider extends BaseProvider {
     this._lastEmittedFrame = null;
     this._rafId = null;
     this._dataSource = null; // StandaloneProvider for pointer lookups
-    this._lastRawPos = { x: 0, y: 0, z: 0 };
   }
 
   /**
@@ -37,55 +36,27 @@ export class StreamProvider extends BaseProvider {
 
   /**
    * Receives raw packets. If cmdIndex is present, it enriches the data.
-   * Hybrid Smoothing: Use "High Quality" file positions if the telemetry is close enough.
+   * Augmented Mode: Prioritize 'raw' telemetry for positions, use 'canonical' for metadata.
    * @param {object} raw 
    */
   push(raw) {
     if (!this.isRunning) return;
 
-    // PRE-FILTER: Jitter Deadzone
-    // If movement is < 0.05mm and status hasn't changed, ignore the update. 
-    const rPos = raw.pos || {};
-    const dx = (rPos.x||0) - this._lastRawPos.x;
-    const dy = (rPos.y||0) - this._lastRawPos.y;
-    const dz = (rPos.z||0) - this._lastRawPos.z;
-    const distSq = dx*dx + dy*dy + dz*dz;
-
-    const isDifferent = distSq > (0.05 * 0.05);
-    const hasStatusChange = (raw.is_extruding !== this._lastIsExtruding || raw.cmdIndex !== this._lastCmdIndex);
-
-    if (!isDifferent && !hasStatusChange) return;
-
-    this._lastRawPos = { x: rPos.x||0, y: rPos.y||0, z: rPos.z||0 };
-    this._lastIsExtruding = raw.is_extruding;
-    this._lastCmdIndex = raw.cmdIndex;
-
-    let data = { ...raw }; 
+    let data = { ...raw }; // Start with the raw MQTT data
 
     // Use "Pointer" lookup if available to augment the telemetry
     if (raw.cmdIndex !== undefined && this._dataSource) {
       const canonical = this._dataSource.getFrameAtIndex(raw.cmdIndex);
       if (canonical) {
-        // HYBRID SMOOTHING: Distance Gate
-        // If real printer (raw) is close to the expected file position (canonical),
-        // we use the 'Perfect' vector from the file for high quality rendering.
-        const rPos = raw.pos || {};
-        const cPos = canonical.pos || {};
-        const dx = (rPos.x||0) - (cPos.x||0);
-        const dy = (rPos.y||0) - (cPos.y||0);
-        const dz = (rPos.z||0) - (cPos.z||0);
-        const distSq = dx*dx + dy*dy + dz*dz;
-        
-        const isClose = distSq < (5.0 * 5.0); // 5mm threshold
-
+        // AUGMENT raw telemetry with high-level G-code context
         data = {
           ...data,
-          // If close enough, use the file-based "Ideal" vector
-          pos: isClose ? { ...canonical.pos } : { ...raw.pos },
-          layer: canonical.layer || data.layer,
-          // Prioritize file-based extrusion for "crisp" lines if synced
-          is_extruding: isClose ? canonical.is_extruding : (raw.is_extruding ?? canonical.is_extruding),
-          is_synced: isClose
+          // Overwrite with metadata that MQTT lacks
+          layer: canonical.layer,
+          // Use canonical extrusion status if raw is uncertain
+          is_extruding: raw.is_extruding ?? canonical.is_extruding,
+          // Marker for UI/Debugging
+          is_synced: true
         };
       }
     }

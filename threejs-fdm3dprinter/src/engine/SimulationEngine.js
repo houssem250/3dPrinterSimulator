@@ -18,7 +18,6 @@ export class SimulationEngine {
     this.filament = filament;
     
     this._lastIsExtruding = false;
-    this._lastFilamentPos = { x: null, y: null, z: null };
   }
 
   /**
@@ -76,22 +75,9 @@ export class SimulationEngine {
       this.zAxis.setPosition(z);
 
       if (isExtruding) {
-        // PRECISION FILTERING: Only add filament point if we moved > 0.1mm
-        const dx = x - (this._lastFilamentPos.x || 0);
-        const dy = y - (this._lastFilamentPos.y || 0);
-        const dz = z - (this._lastFilamentPos.z || 0);
-        const dist = Math.sqrt(dx*dx + dy*dy + dz*dz);
-
-        // Force point update on extrusion transition (to start/stop cleanly)
-        const stateChanged = (isExtruding !== this._lastIsExtruding);
-        
-        if (dist > 0.1 || stateChanged) {
-          this.filament.appendPoint();
-          this._lastFilamentPos = { x, y, z };
-        }
+        this.filament.appendPoint();
       } else {
         this.filament.appendBreak();
-        this._lastFilamentPos = { x: null, y: null, z: null };
       }
     }
 

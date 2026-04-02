@@ -35,25 +35,26 @@ export class StandaloneProvider extends BaseProvider {
   }
 
   /**
-   * Returns a raw (mm-based) frame for a specific command index.
-   * Used for synchronized and augmented streaming.
+   * Returns a pre-normalized frame for a specific command index.
+   * Useful for synchronized streaming.
    * @param {number} cmdIndex 
    * @returns {object|null}
    */
   getFrameAtIndex(cmdIndex) {
+    // cmdIndex is monotonic in this.moves, so we search for the last matching move
+    // to ensure we get the final destination of that command (e.g. end of an arc)
     const move = this.moves.findLast ? 
       this.moves.findLast(m => m.cmdIndex === cmdIndex) :
       [...this.moves].reverse().find(m => m.cmdIndex === cmdIndex);
 
     if (!move) return null;
     
-    return {
+    return this.normalizer.normalize({
       pos: { x: move.X, y: move.Y, z: move.Z, e: move.E },
       is_extruding: move.isExtruding,
       feedrate: move.F,
-      layer: move.layer,
       status: { isPrinting: true, isHomed: true }
-    };
+    });
   }
 
 
