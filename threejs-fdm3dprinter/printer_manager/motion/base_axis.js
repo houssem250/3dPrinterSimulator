@@ -9,19 +9,6 @@
  *    (`animateToPosition`), and timeline-based (`playTimeline`).
  *  - Declare `updatePartsPosition()` as an abstract hook that each
  *    concrete subclass must implement to move the actual Three.js objects.
- *
- * What changed from the original
- * ───────────────────────────────
- *  - `_easeInOut()` extracted as a named private method instead of an
- *    inline ternary — the formula is non-obvious and deserves a name.
- *  - `moveToPosition()` clamps before deciding instant-vs-animated,
- *    so subclasses never receive an out-of-range value.
- *  - `playTimeline()` now logs the axis name in completion/error messages.
- *  - `home()` duration is sourced from `PRINTER_CONFIG` rather than a
- *    magic `500` literal.
- *  - Abstract guard uses a standard pattern (method name in the message)
- *    rather than a generic "must be implemented by subclass" string.
- *
  * @module printer_manager/motion/base_axis
  */
 
@@ -41,7 +28,7 @@ export class BaseAxis {
     this.printerModel = printerModel;
 
     this.axisName   = config.axisName   ?? 'Axis';
-    this.maxTravel  = config.maxTravel  ?? 220;
+    this.maxTravel  = config.maxTravel  ?? 300;
     this.modelScale = config.modelScale ?? 1.0;
     this.screwPitch = config.screwPitch ?? 8;
 
@@ -98,6 +85,25 @@ export class BaseAxis {
   }
 
   /**
+   * Moves the axis to `position` mm using **linear** interpolation.
+   *
+   * Use this for G1 print moves where intermediate positions must lie
+   * exactly on a straight line (no easing curve that distorts the path).
+   *
+   * @param {number} position   Target position in mm.
+   * @param {number} [duration] Animation duration in ms. Default 0 (instant).
+   */
+  moveToPositionLinear(position, duration = 0) {
+    const target = this._clamp(position);
+
+    if (duration <= 0) {
+      this.setPosition(target);
+    } else {
+      this.animateToPositionLinear(target, duration);
+    }
+  }
+
+  /**
    * Teleports the axis to `position` mm with no animation.
    *
    * @param {number} position
@@ -137,6 +143,45 @@ export class BaseAxis {
         this._animationFrame = requestAnimationFrame(tick);
       } else {
         this._animationFrame = null;
+        this.currentPosition = target; // Ensure exact final value
+      }
+    };
+
+    this._animationFrame = requestAnimationFrame(tick);
+  }
+
+  /**
+   * Animates the axis from its current position to `targetPosition` mm
+   * over `duration` ms using **linear** interpolation (constant velocity).
+   *
+   * Unlike `animateToPosition()`, intermediate positions lie exactly on
+   * a straight line — essential for accurate filament rendering.
+   *
+   * @param {number} targetPosition  Clamped before use.
+   * @param {number} duration        Duration in ms.
+   */
+  animateToPositionLinear(targetPosition, duration) {
+    if (this._animationFrame !== null) {
+      cancelAnimationFrame(this._animationFrame);
+      this._animationFrame = null;
+    }
+
+    const start     = this.currentPosition;
+    const target    = this._clamp(targetPosition);
+    const startTime = Date.now();
+
+    const tick = () => {
+      const elapsed  = Date.now() - startTime;
+      const progress = Math.min(elapsed / duration, 1);
+
+      // Linear interpolation — no easing
+      this.setPosition(start + (target - start) * progress);
+
+      if (progress < 1) {
+        this._animationFrame = requestAnimationFrame(tick);
+      } else {
+        this._animationFrame = null;
+        this.currentPosition = target;
       }
     };
 

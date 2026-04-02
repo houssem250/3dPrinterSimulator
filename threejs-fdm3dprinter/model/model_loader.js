@@ -2,23 +2,6 @@
  * @file model_loader.js
  * @description Loads the printer GLB, applies material defaults, and exposes
  * a typed `findPartByName()` helper used by every axis class.
- *
- * What changed from the original
- * ───────────────────────────────
- *  - `loadModel()` now returns a `Promise<THREE.Group>` instead of
- *    accepting a callback. This lets `main.js` use `async/await` and
- *    handle errors with a single `.catch()`.
- *  - Static class fields (`PART_NAMES`, `PART_NAMES_TO_COLOR`) moved to
- *    `model_constants.js` so they can be imported without the loader.
- *  - `logTischDimensions()` renamed to `logBedDimensions()` — English
- *    names throughout; German names are kept only for the actual GLB
- *    object name ('Tisch') since that comes from the Blender file.
- *  - `debugMode` boolean guard removed — all debug methods now live in
- *    `model_debugger.js` and are never imported in production.
- *  - `changeColor` / `changeColors` kept here (production-safe operations).
- *  - All `traverse` calls that repeated the same find-by-name pattern
- *    are replaced with the shared `findPartByName()` helper.
- *
  * @module model/model_loader
  */
 
@@ -29,6 +12,7 @@ import {
   COLOR_OVERRIDES,
   MATERIAL_DEFAULTS,
 } from './model_constants.js';
+import { PRINTER_CONFIG } from '../config/printer_config.js';
 
 export class ModelLoader {
 
@@ -36,7 +20,7 @@ export class ModelLoader {
    * @param {THREE.Scene} scene  The scene the loaded model will be added to.
    */
   constructor(scene) {
-    this.scene  = scene;
+    this.scene = scene;
     this._loader = new GLTFLoader();
 
     /** @type {THREE.Group | null} The root object of the loaded GLB. */
@@ -62,6 +46,42 @@ export class ModelLoader {
         url,
         (gltf) => {
           this.model = gltf.scene;
+          this._setupModel(this.model);
+          this.scene.add(this.model);
+          console.log(`✅ Model loaded: ${url} (${PART_NAMES.size} parts)`);
+          resolve(this.model);
+        },
+        undefined,
+        (error) => {
+          console.error(`❌ Failed to load model: ${url}`, error);
+          reject(error);
+        },
+      );
+    });
+  }
+
+  /**
+   * Removed parts are specified as a Set of part names will be ignored during loading.
+   * This is useful for parts that are present in the GLB but should not be included in the simulation.
+   * @deprecated
+   */
+  loadModel(url, removedParts = new Set()) {
+    return new Promise((resolve, reject) => {
+      this._loader.load(
+        url,
+        (gltf) => {
+          this.model = gltf.scene;
+
+          // Remove specified parts from the model
+          if (removedParts.size > 0) {
+            this.model.traverse((child) => {
+              if (removedParts.has(child.name)) {
+                child.visible = false; // Hide the part instead of removing it to avoid issues with references
+                console.log(`🚫 Part removed from simulation: ${child.name}`);
+              }
+            });
+          }
+
           this._setupModel(this.model);
           this.scene.add(this.model);
           console.log(`✅ Model loaded: ${url} (${PART_NAMES.size} parts)`);
@@ -116,8 +136,8 @@ export class ModelLoader {
     }
 
     const scale = this.model.scale.x;
-    const box   = new THREE.Box3().setFromObject(bed);
-    const size  = new THREE.Vector3();
+    const box = new THREE.Box3().setFromObject(bed);
+    const size = new THREE.Vector3();
     box.getSize(size);
 
     const dimensions = {
@@ -188,7 +208,7 @@ export class ModelLoader {
 
       if (!child.isMesh) return;
 
-      child.castShadow    = true;
+      child.castShadow = true;
       child.receiveShadow = true;
 
       const materials = Array.isArray(child.material)
@@ -200,8 +220,8 @@ export class ModelLoader {
 
         mat.side = THREE.DoubleSide;
         _correctMaterialColor(mat, child.name);
-        mat.roughness   = MATERIAL_DEFAULTS.ROUGHNESS;
-        mat.metalness   = MATERIAL_DEFAULTS.METALNESS;
+        mat.roughness = MATERIAL_DEFAULTS.ROUGHNESS;
+        mat.metalness = MATERIAL_DEFAULTS.METALNESS;
         mat.needsUpdate = true;
       });
     });
@@ -252,7 +272,7 @@ function _correctMaterialColor(mat, partName) {
   const { WHITE_REPLACEMENT, DARKNESS_THRESHOLD, BRIGHTNESS_BOOST } = MATERIAL_DEFAULTS;
 
   const originalHex = mat.color.getHex();
-  const hexString   = mat.color.getHexString();
+  const hexString = mat.color.getHexString();
 
   if (hexString === 'ffffff') {
     mat.color.setHex(WHITE_REPLACEMENT);
@@ -262,6 +282,6 @@ function _correctMaterialColor(mat, partName) {
 
   // Explicit override wins over automatic correction
   if (COLOR_OVERRIDES.has(partName)) {
-    mat.color.setHex(/** @type {number} */ (COLOR_OVERRIDES.get(partName)));
+    mat.color.setHex(/** @type {number} */(COLOR_OVERRIDES.get(partName)));
   }
 }

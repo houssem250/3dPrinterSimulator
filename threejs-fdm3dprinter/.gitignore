@@ -22,3 +22,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# scripts
+test_script_for_data_streaming_aquisition/
