@@ -128,6 +128,7 @@ export class GCodeLoader {
     let lastZ = null;
     let currentF = 1800;   // mm/min
     let currentLayer = 0;
+    let cmdIndex = 0; // Incremental pointer for synchronization
 
     const lines = text.split('\n');
     this.stats.totalLines = lines.length;
@@ -168,18 +169,27 @@ export class GCodeLoader {
           if (params.Z !== undefined) { curZ += toMm(params.Z); move.Z = curZ; }
         }
 
-        if (params.E !== undefined) {
-          const eVal = toMm(params.E);
+        move.cmdIndex = ++cmdIndex;
+
+        // Extrusion detection
+        const eVal = params.E !== undefined ? toMm(params.E) : undefined;
+        let eDelta = 0;
+        if (eVal !== undefined) {
+          eDelta = absoluteE ? (eVal - curE) : eVal;
+        }
+        
+        const hasXY = (params.X !== undefined || params.Y !== undefined);
+        move.isExtruding = (cmd === 'G1' && eVal !== undefined && eDelta > 0.001 && hasXY);
+
+        if (eVal !== undefined) {
           if (absoluteE) {
-            const eDelta = eVal - curE;
             if (eDelta > 0) this.stats.estimatedFilament += eDelta;
             curE = eVal;
             move.E = eVal;
           } else {
-            // Relative E
             if (eVal > 0) this.stats.estimatedFilament += eVal;
             curE += eVal;
-            move.E = curE;  // store absolute so executor doesn't need mode state
+            move.E = curE;
           }
         }
 
@@ -200,7 +210,14 @@ export class GCodeLoader {
           curX, curY, curZ, curE,
           params, cmd === 'G3', absoluteMode, absoluteE, inchMode, currentF,
         );
+        const idx = ++cmdIndex;
         for (const m of arcMoves) {
+          m.cmdIndex = idx;
+          // Arcs are typically G2/G3, which are shorthand for G1 with E.
+          // _lineariseArc already calculates E for segments.
+          const eDelta = (m.E !== undefined) ? (m.E - curE) : 0;
+          m.isExtruding = (eDelta > 0.001);
+
           this.moves.push(m);
           this.stats.parsedMoves++;
           if (m.E !== undefined && m.E > curE) this.stats.estimatedFilament += (m.E - curE);
@@ -216,7 +233,10 @@ export class GCodeLoader {
       if (cmd === 'G4') {
         const ms = params.P !== undefined ? params.P
           : params.S !== undefined ? params.S * 1000 : 0;
-        if (ms > 0) this.moves.push({ cmd: 'G4', dwell: ms });
+        if (ms > 0) {
+          const m = { cmd: 'G4', dwell: ms, cmdIndex: ++cmdIndex };
+          this.moves.push(m);
+        }
         this.stats.parsedMoves++;
         continue;
       }
@@ -236,6 +256,7 @@ export class GCodeLoader {
           if (params.Z !== undefined) { move.Z = 0; curZ = 0; }
         }
         lastZ = null;
+        move.cmdIndex = ++cmdIndex;
         this.moves.push(move);
         this.stats.parsedMoves++;
         continue;
@@ -265,6 +286,7 @@ export class GCodeLoader {
           if (params.Z !== undefined) { move.Z = toMm(params.Z); curZ = move.Z; }
           if (params.E !== undefined) { move.E = toMm(params.E); curE = move.E; }
         }
+        move.cmdIndex = ++cmdIndex;
         this.moves.push(move);
         this.stats.parsedMoves++;
         continue;

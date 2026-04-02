@@ -7,7 +7,7 @@
  *  1. Bootstrap the Three.js scene (camera, renderer, controls) from SCENE_CONFIG.
  *  2. Add lighting and environment dressing.
  *  3. Load the printer GLB model asynchronously (path from PRINTER_CONFIG.MODEL).
- *  4. On load: initialise all three axes, then PrintingMotion + FilamentRenderer.
+ *  4. On load: initialise axes, V3 Providers (Standalone/Stream), and SimulationEngine.
  *  5. In dev mode: attach console helpers and expose `window.app`.
  *  6. Start the render loop.
  */
@@ -19,7 +19,6 @@ import { ModelLoader } from './model/model_loader.js';
 import { XAxisMotion } from './printer_manager/motion/x_axis.js';
 import { YAxisMotion } from './printer_manager/motion/y_axis.js';
 import { ZAxisMotion } from './printer_manager/motion/z_axis.js';
-import { PrintingMotion } from './printer_manager/motion/printing_motion.js';
 import { FilamentRenderer } from './visualization/filament_renderer.js';
 import { PRINTER_CONFIG } from './config/printer_config.js';
 import { SCENE_CONFIG } from './config/scene_config.js';
@@ -51,7 +50,7 @@ const removedParts = new Set([
   'Plug-220v', '220v_cable', 'IEC_connector',
 ]);
 
-modelLoader.loadModel(PRINTER_CONFIG.MODEL.PATH, removedParts).then((printerModel) => {
+modelLoader.loadModel(PRINTER_CONFIG.MODEL.PATH, removedParts).then(async (printerModel) => {
 
   // ── 4a. Scale and position model ─────────────────────────────────────────
   const scale = PRINTER_CONFIG.MODEL.SCALE;
@@ -70,22 +69,63 @@ modelLoader.loadModel(PRINTER_CONFIG.MODEL.PATH, removedParts).then((printerMode
 
   _attachStressTestTimelines(xAxis, yAxis, zAxis);
 
-  // ── 4c. Initialise PrintingMotion ────────────────────────────────────────
-  const printer = new PrintingMotion(xAxis, yAxis, zAxis, {
-    placement: PRINTER_CONFIG.PRINTING.DEFAULT_PLACEMENT,
-    speedMultiplier: PRINTER_CONFIG.PRINTING.DEFAULT_SPEED_MULTIPLIER,
-    modelLoader,
-  });
-  AppContext.printer = printer;
+  // ── 4c. Initialise V3 Architecture ───────────────────────────────────────
+  const { PrinterState } = await import('./src/core/PrinterState.js');
+  const { FrameNormalizer } = await import('./src/core/FrameNormalizer.js');
+  const { StandaloneProvider } = await import('./src/providers/StandaloneProvider.js');
+  const { StreamProvider } = await import('./src/providers/StreamProvider.js');
+  const { SimulationEngine } = await import('./src/engine/SimulationEngine.js');
+  const { mqttService } = await import('./src/services/MqttService.js');
 
-  // ── 4d. Initialise FilamentRenderer and wire to printer ──────────────────
+  const state = new PrinterState();
+  const normalizer = new FrameNormalizer(PRINTER_CONFIG);
+  const standalone = new StandaloneProvider(normalizer);
+  const stream = new StreamProvider(normalizer);
+  stream.setDataSource(standalone);
+
+  // ── 4d. Initialise FilamentRenderer ───────────────────────────────────────
   const filament = new FilamentRenderer(scene, {
     color: PRINTER_CONFIG.PRINTING.FILAMENT_COLOR,
     width: PRINTER_CONFIG.defaults.extrusion.width,
     height: PRINTER_CONFIG.defaults.layer.height,
   });
-  printer.setFilamentRenderer(filament);
-  AppContext.filament = filament;
+
+  const engine = new SimulationEngine({ x: xAxis, y: yAxis, z: zAxis }, filament);
+  engine.connect(state);
+
+  // Wire providers to state updates
+  standalone.onFrame((f) => state.update(f));
+  stream.onFrame((f) => state.update(f));
+
+  Object.assign(AppContext, {
+    state,
+    engine,
+    standalone,
+    stream,
+    filament,
+    currentProvider: standalone,
+  });
+
+  /**
+   * Switches between Standalone and Stream modes.
+   * @param {'standalone'|'stream'} mode
+   */
+  AppContext.switchMode = async (mode) => {
+    console.log(`🔄 Switching to ${mode} mode...`);
+    AppContext.currentProvider.stop();
+    AppContext.filament.clear();
+    
+    if (mode === 'standalone') {
+      AppContext.currentProvider = standalone;
+    } else {
+      AppContext.currentProvider = stream;
+      if (PRINTER_CONFIG.MQTT.ENABLED) {
+        await mqttService.connect();
+      }
+    }
+    
+    await AppContext.currentProvider.start();
+  };
 
   // ── 5. Dev tools ─────────────────────────────────────────────────────────
   if (IS_DEV) {
@@ -95,19 +135,19 @@ modelLoader.loadModel(PRINTER_CONFIG.MODEL.PATH, removedParts).then((printerMode
 
     window.app = AppContext;
 
-    console.log('🛠️  Dev mode — use window.app to access all objects');
-    console.log('   app.printer.executePath()');
+    console.log('🛠️  V3 Architecture Ready — use window.app to access all objects');
+    console.log('   app.switchMode("stream")');
+    console.log('   app.standalone.load(moves); app.standalone.start()');
     console.log('   app.examples.tower()');
-    console.log('   app.xAxis.moveToPosition(150, 1000)');
-    console.log('   app.printer.printStatus()');
     console.log('   app.filament.clear()');
   }
 
-  console.log('✅ Printer simulation ready.');
+  console.log('✅ Printer simulation ready (V3).');
 
 }).catch((err) => {
   console.error('❌ Failed to load printer model:', err);
 });
+
 
 // ── 6. Render loop ────────────────────────────────────────────────────────────
 

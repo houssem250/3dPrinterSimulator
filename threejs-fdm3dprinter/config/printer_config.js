@@ -253,6 +253,20 @@ export const PRINTER_CONFIG = Object.freeze({
      */
     SCALE: 10,
   }),
+
+  // =========================================================================
+  // MQTT — broker connection and topic definitions
+  // =========================================================================
+  MQTT: Object.freeze({
+    ENABLED: true,
+    BROKER_URL: 'ws://localhost:9001', // MQTT over WebSockets
+    TOPICS: Object.freeze({
+      MOTION: 'octoPrint/motion',
+      TEMPERATURE: 'octoPrint/temperature/#',
+      PROGRESS: 'octoPrint/progress/printing',
+      EVENTS: 'octoPrint/event/#'
+    }),
+  }),
 });
 
 // ---------------------------------------------------------------------------

@@ -55,9 +55,9 @@ export class PrintingExamples {
 
   // ── Accessors ───────────────────────────────────────────────────────────────
 
-  get _printer() {
-    if (!AppContext.printer) throw new Error('printer not ready — wait for model to load.');
-    return AppContext.printer;
+  get _standalone() {
+    if (!AppContext.standalone) throw new Error('Standalone provider not ready — wait for model to load.');
+    return AppContext.standalone;
   }
 
   get _scene() {
@@ -121,7 +121,7 @@ export class PrintingExamples {
 
   // ── G-code string ───────────────────────────────────────────────────────────
 
-  fromString(gcode = null) {
+  fromString(gcode = null, autoStart = true) {
     const defaultGcode = `
 G28
 G92 E0
@@ -143,34 +143,31 @@ G28
     const loader = new GCodeLoader();
     loader.parse(gcode ?? defaultGcode);
     loader.summary();
-    this._runMoves(loader.moves);
+    this._runMoves(loader.moves, autoStart);
   }
 
   // ── From URL ────────────────────────────────────────────────────────────────
 
-  fromURL(url = 'models/Jellyfish_Fidget.gcode') {
+  fromURL(url = 'models/Jellyfish_Fidget.gcode', autoStart = true) {
     new GCodeLoader()
       .loadFromURL(url)
       .then((loader) => {
         loader.summary();
-        this._runMoves(loader.moves);
+        this._runMoves(loader.moves, autoStart);
       })
       .catch((err) => console.error('Failed to load G-code:', err.message));
   }
 
   // ── Utilities ───────────────────────────────────────────────────────────────
 
-  /** Logs current printing status. */
-  status() { this._printer.printStatus(); }
-
   /** Pauses the current print. */
   pause() {
-    this._printer.pause();
+    this._standalone.pause();
   }
 
   /** Resumes a paused print. */
   resume() {
-    this._printer.resume();
+    this._standalone.resume();
   }
 
   /**
@@ -178,8 +175,8 @@ G28
    * @param {boolean} [andClear=false]  Also remove partial filament if true.
    */
   stop(andClear = false) {
-    this._printer.stop();
-    if (andClear) this._filamentRenderer.clear();
+    this._standalone.stop();
+    if (andClear) this.clear();
   }
 
   /** Alias for stop() */
@@ -199,8 +196,14 @@ G28
    * Stops, Clears bed, and Home axes.
    * @returns {Promise<void>}
    */
+  /**
+   * Stops, Clears bed, and Home axes.
+   * @returns {Promise<void>}
+   */
   async reset() {
-    await this._printer.reset();
+    this.stop(true);
+    // Queue a home move
+    this._runMoves([{ cmd: 'G28' }]);
   }
 
   /**
@@ -212,7 +215,7 @@ G28
       console.warn('speed(): pass a positive number, e.g. app.examples.speed(5)');
       return;
     }
-    this._printer.speedMultiplier = multiplier;
+    this._standalone.speedMultiplier = multiplier * 100; // StandaloneProvider uses %
     console.log(`Speed multiplier: ${multiplier}×`);
   }
 
@@ -321,24 +324,23 @@ G28
    * @returns {FilamentRenderer}
    */
   get _filamentRenderer() {
-    if (!this._renderer) {
-      this._renderer = new FilamentRenderer(this._scene);
-      this._printer.setFilamentRenderer(this._renderer);
-    }
-    return this._renderer;
+    return AppContext.filament;
   }
 
   /**
    * Guards against double-run, wires the shared renderer, and executes.
    * @param {object[]} moves
    */
-  _runMoves(moves) {
-    if (this._printer.isRunning) {
+  _runMoves(moves, autoStart = true) {
+    if (this._standalone.isRunning) {
       console.warn('Already running. Call app.examples.stop() first.');
       return;
     }
-    // Ensure the shared renderer is attached (idempotent if already set)
-    this._printer.setFilamentRenderer(this._filamentRenderer);
-    this._printer.loadMoves(moves).executePath();
+    this._standalone.load(moves);
+    if (autoStart) {
+      this._standalone.start();
+    } else {
+      console.log('📦 G-code moves loaded into memory (Standby for Stream Mode).');
+    }
   }
 }
