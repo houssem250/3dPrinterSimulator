@@ -1,6 +1,7 @@
+
 /**
- * @file main.js
- * @description Application entry point.
+ * @file main-printer.js
+ * @description Three.js printer simulation initialization.
  *
  * Boot sequence
  * ─────────────
