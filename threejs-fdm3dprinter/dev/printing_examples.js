@@ -48,8 +48,9 @@ export class PrintingExamples {
     console.log('   app.examples.circle()        — 2-layer circle');
     console.log('   app.examples.tower()         — calibration tower');
     console.log('   app.examples.manualMoves()   — raw move list');
-    console.log('   app.examples.fromString(gc)  — parse a G-code string');
-    console.log('   app.examples.fromURL(url)    — load a .gcode file');
+    console.log('   app.examples.fromString(gc)  — load G-code string');
+    console.log('   app.examples.fromURL(url)    — load .gcode file');
+    console.log('   app.examples.print()         — start the print');
     console.log('   app.examples.dbg             — model inspection tools');
   }
 
@@ -82,19 +83,19 @@ export class PrintingExamples {
   /** Prints a square at default centre with given side length and layers. */
   square(startX = undefined, startY = undefined, size = 40, layers = 2) {
     const moves = PathGenerators.square(startX, startY, size, layers);
-    this._runMoves(moves);
+    this._runMoves(moves, false);
   }
 
   /** Prints a circle at default centre with given radius and layers. */
   circle(cx = undefined, cy = undefined, radius = 30, layers = 2) {
     const moves = PathGenerators.circle(cx, cy, radius, layers);
-    this._runMoves(moves);
+    this._runMoves(moves, false);
   }
   /** Print a calibration tower at default centre */
   tower(cx = undefined, cy = undefined, size = 40, layers = 10, layerHeight = undefined, speed = 40) {
     const moves = PathGenerators.tower(cx, cy, size, layers, layerHeight, speed);
     console.log(`Tower: size=${size} mm  layers=${layers}  height=${(layers * (layerHeight||0.2)).toFixed(2)} mm`);
-    this._runMoves(moves);
+    this._runMoves(moves, false);
   }
 
   // ── Manual move list ────────────────────────────────────────────────────────
@@ -116,12 +117,12 @@ export class PrintingExamples {
       { cmd: 'G1',  X: 50,  Y: 150, Z: 0.4, F: 1800 },
       { cmd: 'G1',  X: 50,  Y: 50,  Z: 0.4, F: 1800 },
       { cmd: 'G28' },
-    ]);
+    ], false);
   }
 
   // ── G-code string ───────────────────────────────────────────────────────────
 
-  fromString(gcode = null, autoStart = true) {
+  fromString(gcode = null) {
     const defaultGcode = `
 G28
 G92 E0
@@ -143,22 +144,35 @@ G28
     const loader = new GCodeLoader();
     loader.parse(gcode ?? defaultGcode);
     loader.summary();
-    this._runMoves(loader.moves, autoStart);
+    this._runMoves(loader.moves, false);
   }
 
   // ── From URL ────────────────────────────────────────────────────────────────
 
-  fromURL(url = 'models/Jellyfish_Fidget.gcode', autoStart = true) {
+  fromURL(url = 'models/Jellyfish_Fidget.gcode') {
     new GCodeLoader()
       .loadFromURL(url)
       .then((loader) => {
         loader.summary();
-        this._runMoves(loader.moves, autoStart);
+        this._runMoves(loader.moves, false);
       })
       .catch((err) => console.error('Failed to load G-code:', err.message));
   }
 
   // ── Utilities ───────────────────────────────────────────────────────────────
+  
+  /** Starts the current standalone print. */
+  print() {
+    if (this._standalone.isRunning) {
+      console.warn('Simulation is already running.');
+      return;
+    }
+    if (this._standalone.moves.length === 0) {
+      console.error('No moves loaded. Use fromURL() or fromString() first.');
+      return;
+    }
+    this._standalone.start();
+  }
 
   /** Pauses the current print. */
   pause() {
@@ -331,7 +345,7 @@ G28
    * Guards against double-run, wires the shared renderer, and executes.
    * @param {object[]} moves
    */
-  _runMoves(moves, autoStart = true) {
+  _runMoves(moves, autoStart = false) {
     if (this._standalone.isRunning) {
       console.warn('Already running. Call app.examples.stop() first.');
       return;
@@ -340,7 +354,7 @@ G28
     if (autoStart) {
       this._standalone.start();
     } else {
-      console.log('📦 G-code moves loaded into memory (Standby for Stream Mode).');
+      console.log('📦 G-code moves loaded into memory. Type `app.examples.print()` to start.');
     }
   }
 }

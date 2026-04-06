@@ -25,3 +25,6 @@ dist-ssr
 
 # scripts
 test_script_for_data_streaming_aquisition/
+
+#pdf ?
+*.pdf
