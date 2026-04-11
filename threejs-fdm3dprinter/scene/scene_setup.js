@@ -74,7 +74,10 @@ export function applyLoadedCameraPosition(camera) {
 // ── Renderer ──────────────────────────────────────────────────────────────────
 
 /**
- * Creates, sizes, and mounts the WebGLRenderer to `document.body`.
+ * Creates a WebGLRenderer **without** mounting it to the DOM.
+ *
+ * The consumer is responsible for appending `renderer.domElement` to a
+ * container — see {@link mountRenderer}.
  *
  * Shadow maps are enabled; the shadow-map size is read from config.
  *
@@ -83,14 +86,14 @@ export function applyLoadedCameraPosition(camera) {
 export function createRenderer() {
   const renderer = new THREE.WebGLRenderer({ antialias: RENDERER.ANTIALIAS });
 
-  renderer.setSize(window.innerWidth, window.innerHeight);
+  // Placeholder size — will be corrected by mountRenderer / ResizeObserver.
+  renderer.setSize(1, 1);
   renderer.setPixelRatio(window.devicePixelRatio);
 
   if (RENDERER.SHADOW_MAP) {
     renderer.shadowMap.enabled = true;
   }
 
-  document.body.appendChild(renderer.domElement);
   return renderer;
 }
 
@@ -116,53 +119,88 @@ export function createControls(camera, renderer) {
 // ── Resize handler ────────────────────────────────────────────────────────────
 
 /**
- * Registers a `resize` listener that keeps the camera aspect ratio and
- * renderer size in sync with the browser window.
+ * Observes a container element and keeps the renderer + camera in sync
+ * with its dimensions.  Uses ResizeObserver so the canvas tracks the
+ * container — not the full browser window — which is essential for the
+ * desktop shell layout (header / sidebar / canvas / footer).
  *
- * Safe to call multiple times — the previous listener is removed first.
+ * Safe to call multiple times — the previous observer is disconnected first.
  *
  * @param {THREE.PerspectiveCamera} camera
  * @param {THREE.WebGLRenderer}     renderer
+ * @param {HTMLElement}             container
  */
-export function registerResizeHandler(camera, renderer) {
-  // Remove any previously registered handler attached to this renderer
-  // so hot-module-replacement doesn't stack listeners.
-  if (renderer.__resizeHandler) {
-    window.removeEventListener('resize', renderer.__resizeHandler);
+export function registerResizeHandler(camera, renderer, container) {
+  // Tear down any previous observer (HMR safety).
+  if (renderer.__resizeObserver) {
+    renderer.__resizeObserver.disconnect();
   }
 
-  const handler = () => {
-    camera.aspect = window.innerWidth / window.innerHeight;
+  const ro = new ResizeObserver(([entry]) => {
+    const { width, height } = entry.contentRect;
+    if (width === 0 || height === 0) return;
+    camera.aspect = width / height;
     camera.updateProjectionMatrix();
-    renderer.setSize(window.innerWidth, window.innerHeight);
-  };
+    renderer.setSize(width, height, false);   // false = don't touch CSS
+  });
 
-  renderer.__resizeHandler = handler;
-  window.addEventListener('resize', handler);
+  ro.observe(container);
+  renderer.__resizeObserver = ro;
+}
+
+// ── Mount renderer into a container ───────────────────────────────────────────
+
+/**
+ * Appends the renderer's canvas to `container`, sizes it to fit, and
+ * starts a ResizeObserver so future layout changes are tracked.
+ *
+ * Call this from the React layer once a ref to the container `<div>` is
+ * available.
+ *
+ * @param {THREE.WebGLRenderer}     renderer
+ * @param {THREE.PerspectiveCamera} camera
+ * @param {HTMLElement}             container
+ */
+export function mountRenderer(renderer, camera, container) {
+  // CSS makes the canvas fill whatever container it lives in.
+  // setSize(w, h, false) then sets the *drawing-buffer* resolution to match.
+  const canvas = renderer.domElement;
+  canvas.style.display = 'block';
+  canvas.style.width   = '100%';
+  canvas.style.height  = '100%';
+
+  container.appendChild(canvas);
+
+  // Immediately size the buffer to the container's current dimensions.
+  const { clientWidth: w, clientHeight: h } = container;
+  if (w > 0 && h > 0) {
+    camera.aspect = w / h;
+    camera.updateProjectionMatrix();
+    renderer.setSize(w, h, false);
+  }
+
+  registerResizeHandler(camera, renderer, container);
 }
 
 // ── Convenience bootstrap ─────────────────────────────────────────────────────
 
 /**
- * One-call setup that creates every rendering primitive, mounts the canvas,
- * and registers the resize handler.
- *
- * Returns everything needed to build the rest of the app.
+ * One-call setup that creates every rendering primitive **without** mounting
+ * the canvas to the DOM.  The consumer must call {@link mountRenderer}
+ * to place the canvas inside a container element.
  *
  * @returns {{ scene: THREE.Scene, camera: THREE.PerspectiveCamera, renderer: THREE.WebGLRenderer, controls: OrbitControls }}
  *
  * @example
- * import { bootstrapScene } from './scene/scene_setup.js';
- *
  * const { scene, camera, renderer, controls } = bootstrapScene();
+ * // later, inside React:
+ * mountRenderer(renderer, camera, containerDiv);
  */
 export function bootstrapScene() {
   const scene    = createScene();
   const camera   = createCamera();
   const renderer = createRenderer();
   const controls = createControls(camera, renderer);
-
-  registerResizeHandler(camera, renderer);
 
   return { scene, camera, renderer, controls };
 }
