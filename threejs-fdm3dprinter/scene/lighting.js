@@ -22,36 +22,42 @@ import * as THREE from 'three';
 
 const AMBIENT = {
   COLOR:     0xffffff,
-  INTENSITY: 1.5,
+  INTENSITY: 0.5, // Lowered ambient in favor of Hemi + Studio lights
+};
+
+const HEMI_LIGHT = {
+  SKY:       0xffffff,
+  GROUND:    0xaaaaaa,
+  INTENSITY: 0.8,
 };
 
 const DIR_LIGHT = {
   COLOR:     0xffffff,
-  INTENSITY: 1.5,
-  POSITION:  { x: 5, y: 15, z: 7 },
+  INTENSITY: 1.2,
+  POSITION:  { x: 10, y: 30, z: 15 },
 };
 
 const FILL_LIGHT = {
-  COLOR:     0xccddff,
-  INTENSITY: 1.2,
-  POSITION:  { x: -8, y: 8, z: 15 },
+  COLOR:     0xffffff,
+  INTENSITY: 0.8,
+  POSITION:  { x: -15, y: 15, z: 20 },
 };
 
 const KEY_LIGHT = {
   COLOR:     0xffffff,
-  INTENSITY: 1.0,
-  POSITION:  { x: 8, y: 12, z: 8 },
+  INTENSITY: 0.5,
+  POSITION:  { x: 15, y: 20, z: 15 },
 };
 
 const BACK_LIGHT = {
-  COLOR:     0xfffacd,
-  INTENSITY: 0.8,
-  POSITION:  { x: 0, y: 8, z: -15 },
+  COLOR:     0xffffff,
+  INTENSITY: 0.4,
+  POSITION:  { x: 0, y: 10, z: -20 },
 };
 
 const BED_SPOT = {
   COLOR:     0xffffff,
-  INTENSITY: 5.0,
+  INTENSITY: 3.0,
   POSITION:  { x: 0, y: 2, z: 8 },
   TARGET:    { x: 0, y: 4, z: 0 },
   ANGLE:     Math.PI / 5,
@@ -77,21 +83,27 @@ const BED_SPOT = {
  */
 export function addLighting(scene) {
   const ambient    = _makeAmbient();
+  const hemiLight  = _makeHemisphereLight();
   const dirLight   = _makeDirectionalLight();
   const fillLight  = _makeFillLight();
   const keyLight   = _makeKeyLight();
   const backLight  = _makeBackLight();
   const { spot: bedSpot, target: bedTarget } = _makeBedSpot();
 
-  scene.add(ambient, dirLight, fillLight, keyLight, backLight, bedSpot, bedTarget);
+  scene.add(ambient, hemiLight, dirLight, fillLight, keyLight, backLight, bedSpot, bedTarget);
 
-  return { ambient, dirLight, fillLight, keyLight, backLight, bedSpot };
+  return { ambient, hemiLight, dirLight, fillLight, keyLight, backLight, bedSpot };
 }
 
 // ── Private builders ──────────────────────────────────────────────────────────
 
 function _makeAmbient() {
   return new THREE.AmbientLight(AMBIENT.COLOR, AMBIENT.INTENSITY);
+}
+
+function _makeHemisphereLight() {
+  const { SKY, GROUND, INTENSITY } = HEMI_LIGHT;
+  return new THREE.HemisphereLight(SKY, GROUND, INTENSITY);
 }
 
 function _makeDirectionalLight() {

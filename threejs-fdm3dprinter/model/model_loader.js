@@ -30,40 +30,12 @@ export class ModelLoader {
   // ── Loading ─────────────────────────────────────────────────────────────────
 
   /**
-   * Loads the GLB at `url`, applies material corrections, adds it to the
-   * scene, and resolves with the model's root `THREE.Group`.
+   * Loads the GLB at url and applies material corrections.
+   * The master model is NOT added to the scene; it is used only for cloning.
    *
-   * @param {string} url  Path to the .glb file.
+   * @param {string} url Path to the .glb file.
+   * @param {Set<string>} [removedParts] Set of part names to hide.
    * @returns {Promise<THREE.Group>}
-   *
-   * @example
-   * const model = await modelLoader.loadModel('models/3dprinter.glb');
-   * model.scale.setScalar(10);
-   */
-  loadModel(url) {
-    return new Promise((resolve, reject) => {
-      this._loader.load(
-        url,
-        (gltf) => {
-          this.model = gltf.scene;
-          this._setupModel(this.model);
-          this.scene.add(this.model);
-          console.log(`✅ Model loaded: ${url} (${PART_NAMES.size} parts)`);
-          resolve(this.model);
-        },
-        undefined,
-        (error) => {
-          console.error(`❌ Failed to load model: ${url}`, error);
-          reject(error);
-        },
-      );
-    });
-  }
-
-  /**
-   * Removed parts are specified as a Set of part names will be ignored during loading.
-   * This is useful for parts that are present in the GLB but should not be included in the simulation.
-   * @deprecated
    */
   loadModel(url, removedParts = new Set()) {
     return new Promise((resolve, reject) => {
@@ -83,7 +55,6 @@ export class ModelLoader {
           }
 
           this._setupModel(this.model);
-          this.scene.add(this.model);
           console.log(`✅ Model loaded: ${url} (${PART_NAMES.size} parts)`);
           resolve(this.model);
         },

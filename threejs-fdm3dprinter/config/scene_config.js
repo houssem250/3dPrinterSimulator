@@ -3,7 +3,7 @@ export const SCENE_CONFIG = Object.freeze({
 // ── Scene ──────────────────────────────────────────────────────────────────
 
   SCENE: Object.freeze({
-    BACKGROUND_COLOR: 0x888888,
+    BACKGROUND_COLOR: 0xf0f0f0,
 
     CAMERA: Object.freeze({
       FOV:          45,
@@ -28,17 +28,17 @@ export const SCENE_CONFIG = Object.freeze({
     }),
 
     GRID: Object.freeze({
-      SIZE:       20,
-      DIVISIONS:  20,
-      COLOR_MAIN: 0x888888,
-      COLOR_SUB:  0x444444,
+      SIZE:       100,
+      DIVISIONS:  100,
+      COLOR_MAIN: 0x999999,
+      COLOR_SUB:  0xcccccc,
     }),
 
     FLOOR: Object.freeze({
-      COLOR:    0x223344,
-      ROUGHNESS: 0.8,
-      METALNESS: 0.1,
-      OPACITY:   0.3,
+      COLOR:    0xffffff,
+      ROUGHNESS: 1.0,
+      METALNESS: 0.0,
+      OPACITY:   0.6,
     }),
   }),
 

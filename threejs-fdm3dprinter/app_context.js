@@ -53,23 +53,42 @@
 
 /** @type {IAppContext} */
 export const AppContext = {
-  // Three.js core
+  // Three.js core (Shared)
   scene:       null,
   camera:      null,
   renderer:    null,
   controls:    null,
 
-  // Model
+  // Model Metadata
   modelLoader: null,
+  config:      null,
+  sceneConfig: null,
 
-  // Axes
-  xAxis:       null,
-  yAxis:       null,
-  zAxis:       null,
+  // PRINTER FARM
+  printers:    [], // Array of PrinterInstance
 
-  // Printing
-  printer:     null,
+  // Shorthands (for backward compatibility with app.printer, app.xAxis etc.)
+  get printer()   { return this.printers[0]; },
+  get xAxis()     { return this.printers[0]?.xAxis; },
+  get yAxis()     { return this.printers[0]?.yAxis; },
+  get zAxis()     { return this.printers[0]?.zAxis; },
+  get standalone(){ return this.printers[0]?.standalone; },
+  get stream()    { return this.printers[0]?.stream; },
+  get state()     { return this.printers[0]?.state; },
+  get engine()    { return this.printers[0]?.engine; },
+  get filament()  { return this.printers[0]?.filament; },
 
-  // Dev
+  /**
+   * Switches the first printer's mode.
+   * @param {'standalone'|'stream'} mode
+   */
+  async switchMode(mode) {
+    if (this.printers[0]) {
+      const { mqttService } = await import('./src/services/MqttService.js');
+      await this.printers[0].switchMode(mode, mqttService);
+    }
+  },
+
+  // Dev tools (usually attached to the first printer)
   examples:    null,
 };

@@ -12,6 +12,8 @@
  *  6. Start the render loop.
  */
 
+import * as THREE from 'three';
+import './style.css';
 import { bootstrapScene, applyLoadedCameraPosition } from './scene/scene_setup.js';
 import { addLighting } from './scene/lighting.js';
 import { addEnvironment } from './scene/environment.js';
@@ -52,107 +54,105 @@ const removedParts = new Set([
 
 modelLoader.loadModel(PRINTER_CONFIG.MODEL.PATH, removedParts).then(async (printerModel) => {
 
-  // ── 4a. Scale and position model ─────────────────────────────────────────
+  // ── 4a. Apply metadata & Scale ──────────────────────────────────────────
   const scale = PRINTER_CONFIG.MODEL.SCALE;
-  printerModel.position.set(0, 0, 0);
   printerModel.scale.set(scale, scale, scale);
 
   applyLoadedCameraPosition(camera);
   modelLoader.logBedDimensions?.();
 
-  // ── 4b. Initialise axes ──────────────────────────────────────────────────
-  const xAxis = new XAxisMotion(modelLoader, printerModel, scale);
-  const yAxis = new YAxisMotion(modelLoader, printerModel, scale);
-  const zAxis = new ZAxisMotion(modelLoader, printerModel, scale);
-
-  Object.assign(AppContext, { xAxis, yAxis, zAxis });
-
-  _attachStressTestTimelines(xAxis, yAxis, zAxis);
-
-  // ── 4c. Initialise V3 Architecture ───────────────────────────────────────
-  const { PrinterState } = await import('./src/core/PrinterState.js');
-  const { FrameNormalizer } = await import('./src/core/FrameNormalizer.js');
-  const { StandaloneProvider } = await import('./src/providers/StandaloneProvider.js');
-  const { StreamProvider } = await import('./src/providers/StreamProvider.js');
-  const { SimulationEngine } = await import('./src/engine/SimulationEngine.js');
+  // ── 4. Initialise Printer Farm ──────────────────────────────────────────
+  const { PrinterFarmManager } = await import('./src/core/PrinterFarmManager.js');
   const { mqttService } = await import('./src/services/MqttService.js');
+  
+  const farm = new PrinterFarmManager(scene, camera, controls);
+  AppContext.farm = farm;
 
-  const state = new PrinterState();
-  const normalizer = new FrameNormalizer(PRINTER_CONFIG);
-  const standalone = new StandaloneProvider(normalizer);
-  const stream = new StreamProvider(normalizer);
-  stream.setDataSource(standalone);
+  // Farm Config
+  const ROWS = 2;
+  const COLS = 2;
+  const SPACING = 8; // units
 
-  // ── 4d. Initialise FilamentRenderer ───────────────────────────────────────
-  const filament = new FilamentRenderer(scene, {
-    color: PRINTER_CONFIG.PRINTING.FILAMENT_COLOR,
-    width: PRINTER_CONFIG.defaults.extrusion.width,
-    height: PRINTER_CONFIG.defaults.layer.height,
+  farm.setupGrid(ROWS, COLS, SPACING, printerModel, mqttService);
+
+  // ── 5. Add Printer & Deployment Menu ─────────────────────────────────────
+  const { AddPrinterMenu } = await import('./src/ui/AddPrinterMenu.js');
+  const addMenu = new AddPrinterMenu((variant) => {
+    farm.enterPlacementMode(variant);
   });
 
-  const engine = new SimulationEngine({ x: xAxis, y: yAxis, z: zAxis }, filament);
-  engine.connect(state);
+  // ── 6. Navigation HUD (Mini-Map) ─────────────────────────────────────────
+  const { NavigationHUD } = await import('./src/ui/NavigationHUD.js');
+  const hud = new NavigationHUD(
+    AppContext.printers.length, 
+    COLS, 
+    (id) => farm.select(id),
+    (id, active) => farm.highlight(id, active),
+    () => addMenu.show(),
+    () => farm.focusOverview()
+  );
 
-  // Wire providers to state updates
-  standalone.onFrame((f) => state.update(f));
-  stream.onFrame((f) => state.update(f));
-
-  Object.assign(AppContext, {
-    state,
-    engine,
-    standalone,
-    stream,
-    filament,
-    currentProvider: standalone,
-  });
-
-  /**
-   * Switches between Standalone and Stream modes.
-   * @param {'standalone'|'stream'} mode
-   */
-  AppContext.switchMode = async (mode) => {
-    console.log(`🔄 Switching to ${mode} mode...`);
-    AppContext.currentProvider.stop();
-    AppContext.filament.clear();
-    
-    if (mode === 'standalone') {
-      AppContext.currentProvider = standalone;
-    } else {
-      AppContext.currentProvider = stream;
-      if (PRINTER_CONFIG.MQTT.ENABLED) {
-        await mqttService.connect();
-      }
+  // Sync HUD highlight & refresh when farm changes
+  farm.onSelect((id, wasAdded) => {
+    if (wasAdded) {
+      hud.refresh(AppContext.printers.length);
     }
-    
-    await AppContext.currentProvider.start();
-  };
+    hud.updateSelection(id);
+  });
 
-  // ── 5. Dev tools ─────────────────────────────────────────────────────────
+  // ── 7. Interaction (Placement Mode) ──────────────────────────────────────
+  const raycaster = new THREE.Raycaster();
+  const mouse = new THREE.Vector2();
+
+  window.addEventListener('mousemove', (event) => {
+    if (!farm.isPlacementMode) return;
+    mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+    mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+    raycaster.setFromCamera(mouse, camera);
+    farm.handleInteraction(raycaster);
+  });
+
+  window.addEventListener('click', () => {
+    if (!farm.isPlacementMode) return;
+    const spawnPos = farm.handleInteraction(raycaster);
+    if (spawnPos) {
+      const p = farm.addPrinter(spawnPos, farm.pendingVariant);
+      farm.exitPlacementMode();
+      farm.focusOn(p.id);
+    }
+  });
+
+  document.getElementById('cancel-placement').onclick = () => farm.exitPlacementMode();
+
+  // ── 8. Dev tools ─────────────────────────────────────────────────────────
   if (IS_DEV) {
-    import('./dev/printing_examples.js').then(({ PrintingExamples }) => {
-      AppContext.examples = new PrintingExamples();
-    });
+    const { PrintingExamples } = await import('./dev/printing_examples.js');
+    AppContext.examples = new PrintingExamples();
 
     window.app = AppContext;
 
-    console.log('🛠️  V3 Architecture Ready — use window.app to access all objects');
-    console.log('   app.switchMode("stream")');
-    console.log('   app.standalone.load(moves); app.standalone.start()');
-    console.log('   app.examples.tower()');
-    console.log('   app.filament.clear()');
+    console.log('🏗️  Print Farm Manager Ready');
+    console.log('   app.farm.focusOn(id)  — smooth glide to machine');
+    console.log('   app.farm.select(null) — reset focus');
   }
 
-  console.log('✅ Printer simulation ready (V3).');
+  console.log(`✅ Print Farm initialized with ${AppContext.printers.length} printers.`);
 
 }).catch((err) => {
   console.error('❌ Failed to load printer model:', err);
 });
 
 
-// ── 6. Render loop ────────────────────────────────────────────────────────────
+// ── 7. Render loop ────────────────────────────────────────────────────────────
 
 (function animate() {
   requestAnimationFrame(animate);
+
+  // Smoothly glide camera if focus is active
+  if (AppContext.farm) {
+    AppContext.farm.update();
+  }
+
   controls.update();
   renderer.render(scene, camera);
 })();

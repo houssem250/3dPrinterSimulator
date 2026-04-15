@@ -25,14 +25,39 @@ const { CAMERA, CONTROLS, RENDERER } = SCENE_CONFIG.SCENE;
 // ── Scene ─────────────────────────────────────────────────────────────────────
 
 /**
- * Creates a bare Three.js Scene with the configured background color.
+ * Creates a bare Three.js Scene with a Fusion 360-style gradient background.
  *
  * @returns {THREE.Scene}
  */
 export function createScene() {
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(SCENE_CONFIG.SCENE.BACKGROUND_COLOR);
+  scene.background = _createGradientBackground();
   return scene;
+}
+
+/**
+ * Generates a vertical gradient texture (White -> Light Gray).
+ * @returns {THREE.CanvasTexture}
+ */
+function _createGradientBackground() {
+  const size = 512;
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+
+  const context = canvas.getContext('2d');
+  const gradient = context.createLinearGradient(0, 0, 0, size);
+  
+  // Fusion 360 top-down gradient
+  gradient.addColorStop(0, '#ffffff'); // Top
+  gradient.addColorStop(1, '#d0d0d0'); // Bottom (slightly darker than config for depth)
+  
+  context.fillStyle = gradient;
+  context.fillRect(0, 0, size, size);
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  return texture;
 }
 
 // ── Camera ────────────────────────────────────────────────────────────────────

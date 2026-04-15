@@ -5,9 +5,14 @@
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>FDM 3D Printer Simulator</title>
+    <link rel="stylesheet" href="./style.css" />
   </head>
   <body>
     <div id="app"></div>
+    <div id="placement-overlay" class="pulse-border">
+      SELECT A POSITION FOR: <span class="v-name">PRINTER</span>
+      <button id="cancel-placement">CANCEL</button>
+    </div>
     <script type="module" src="/main.js"></script>
   </body>
 </html>

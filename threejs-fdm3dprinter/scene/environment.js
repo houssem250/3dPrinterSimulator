@@ -36,7 +36,8 @@ export function addEnvironment(scene) {
   const grid  = _makeGrid();
   const floor = _makeFloor();
 
-  scene.add(grid, floor);
+  scene.add(grid);
+  scene.add(floor);
 
   return { grid, floor };
 }
@@ -63,16 +64,16 @@ function _makeGrid() {
 function _makeFloor() {
   const geometry = new THREE.PlaneGeometry(GRID.SIZE, GRID.SIZE);
   const material = new THREE.MeshStandardMaterial({
-    color:       FLOOR.COLOR,
-    roughness:   FLOOR.ROUGHNESS,
-    metalness:   FLOOR.METALNESS,
+    color: FLOOR.COLOR,
+    roughness: FLOOR.ROUGHNESS,
+    metalness: FLOOR.METALNESS,
     transparent: true,
-    opacity:     FLOOR.OPACITY,
+    opacity: FLOOR.OPACITY,
   });
 
   const floor = new THREE.Mesh(geometry, material);
-  floor.rotation.x    = -Math.PI / 2;
-  floor.position.y    = 0;
+  floor.rotation.x = -Math.PI / 2;
+  floor.position.y = 0;
   floor.receiveShadow = true;
 
   return floor;

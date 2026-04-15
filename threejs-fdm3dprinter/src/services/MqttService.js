@@ -14,15 +14,37 @@ export class MqttService {
     this.client = null;
     this.isConnected = false;
 
-    // We maintain a local "merged" state so that if temperature arrives 
-    // without motion, or vice versa, the StreamProvider gets a complete update.
-    this.localState = {
-      x: 0, y: 0, z: 0, e: 0, f: 0,
-      temp: { nozzle: 0, bed: 0 },
-      progress: 0,
-      cmdIndex: undefined,
-      isExtruding: false
-    };
+    /** 
+     * Map of printer instances.
+     * Key: printerId
+     * Value: { stream, topicPrefix, localState }
+     */
+    this.instances = new Map();
+  }
+
+  /**
+   * Registers a printer instance to receive MQTT data.
+   * @param {number|string} id 
+   * @param {import('../providers/StreamProvider.js').StreamProvider} stream 
+   * @param {string} topicPrefix e.g. "octoprint/" or "printer1/"
+   */
+  registerPrinter(id, stream, topicPrefix) {
+    this.instances.set(id, {
+      stream,
+      topicPrefix,
+      localState: {
+        x: 0, y: 0, z: 0, e: 0, f: 0,
+        temp: { nozzle: 0, bed: 0 },
+        progress: 0,
+        cmdIndex: undefined,
+        isExtruding: false
+      }
+    });
+
+    // If already connected, subscribe to the new prefix
+    if (this.isConnected && this.client) {
+      this.client.subscribe(`${topicPrefix}#`);
+    }
   }
 
   /**
@@ -34,14 +56,10 @@ export class MqttService {
     console.log(`🔌 MQTT: Connecting to ${PRINTER_CONFIG.MQTT.BROKER_URL}...`);
 
     try {
-      // Dynamic import from CDN
       const mqttModule = await import('https://esm.sh/mqtt');
-      // Look for connect in named exports or default export
       const connect = mqttModule.connect || mqttModule.default?.connect;
 
-      if (typeof connect !== 'function') {
-        throw new Error('Could not find connect() in MQTT module');
-      }
+      if (typeof connect !== 'function') throw new Error('Could not find connect() in MQTT module');
 
       this.client = connect(PRINTER_CONFIG.MQTT.BROKER_URL);
 
@@ -49,20 +67,22 @@ export class MqttService {
         this.isConnected = true;
         console.log('✅ MQTT: Connected to broker.');
 
-        // Subscribe to all configured topics
-        const topics = Object.values(PRINTER_CONFIG.MQTT.TOPICS);
-        this.client.subscribe(topics, (err) => {
-          if (!err) console.log(`📡 MQTT: Subscribed to ${topics.join(', ')}`);
-        });
+        // Subscribe to all registered printer prefixes
+        for (const inst of this.instances.values()) {
+          this.client.subscribe(`${inst.topicPrefix}#`);
+        }
+        
+        // Also subscribe to legacy defaults if any
+        if (this.instances.size === 0) {
+           this.client.subscribe('octoprint/#');
+        }
       });
 
       this.client.on('message', (topic, message) => {
         this._handleMessage(topic, message.toString());
       });
 
-      this.client.on('error', (err) => {
-        console.error('❌ MQTT Error:', err);
-      });
+      this.client.on('error', (err) => console.error('❌ MQTT Error:', err));
 
     } catch (err) {
       console.error('❌ MQTT Initialization Failed:', err);
@@ -70,63 +90,76 @@ export class MqttService {
   }
 
   /**
-   * Translates incoming JSON into Digital Shadow frames.
+   * Routes incoming JSON into the correct Digital Shadow instance.
    * @private
    */
   _handleMessage(topic, payload) {
+    // 1. Find which machine this topic belongs to
+    let target = null;
+
+    for (const inst of this.instances.values()) {
+      if (topic.startsWith(inst.topicPrefix)) {
+        target = inst;
+        break;
+      }
+    }
+
+    // Fallback for single-printer legacy setups (no prefix matched)
+    if (!target && this.instances.size === 1) {
+      target = Array.from(this.instances.values())[0];
+    }
+
+    if (!target) return;
+
     let data;
     try {
       data = JSON.parse(payload);
     } catch (e) { return; }
 
+    const { localState, stream, topicPrefix } = target;
     let isMotion = false;
 
-    // 1. Motion Topic (Mapping from OctoPrint plugin)
-    if (topic === PRINTER_CONFIG.MQTT.TOPICS.MOTION) {
-      // Only recalculate extrusion if E data is present, otherwise retain previous state
+    // 2. Decode Topic
+    const subTopic = topic.replace(topicPrefix, '');
+
+    // Motion
+    if (subTopic === 'motion' || topic === PRINTER_CONFIG.MQTT.TOPICS.MOTION) {
       if (data.e !== undefined || data.is_extruding !== undefined) {
-        const eDelta = data.e !== undefined ? (data.e - this.localState.e) : 0;
-        this.localState.isExtruding = data.is_extruding ?? (eDelta > 0.001);
+        const eDelta = data.e !== undefined ? (data.e - localState.e) : 0;
+        localState.isExtruding = data.is_extruding ?? (eDelta > 0.001);
       }
 
-      this.localState.x = data.x ?? this.localState.x;
-      this.localState.y = data.y ?? this.localState.y;
-      this.localState.z = data.z ?? this.localState.z;
-      this.localState.e = data.e ?? this.localState.e;
-      this.localState.f = data.f ?? this.localState.f;
-      this.localState.cmdIndex = data.cmdIndex; 
-      
+      localState.x = data.x ?? localState.x;
+      localState.y = data.y ?? localState.y;
+      localState.z = data.z ?? localState.z;
+      localState.e = data.e ?? localState.e;
+      localState.f = data.f ?? localState.f;
+      localState.cmdIndex = data.cmdIndex; 
       isMotion = true;
     }
 
-    // 2. Temperature Topics (Passive update)
-    if (topic.includes('temperature/tool0')) {
-      this.localState.temp.nozzle = data.actual ?? this.localState.temp.nozzle;
+    // Temperature
+    if (subTopic.includes('temperature/tool0')) {
+      localState.temp.nozzle = data.actual ?? localState.temp.nozzle;
     }
-    if (topic.includes('temperature/bed')) {
-      this.localState.temp.bed = data.actual ?? this.localState.temp.bed;
-    }
-
-    // 3. Progress Topic (Passive update)
-    if (topic === PRINTER_CONFIG.MQTT.TOPICS.PROGRESS) {
-      this.localState.progress = data.progress ?? this.localState.progress;
+    if (subTopic.includes('temperature/bed')) {
+      localState.temp.bed = data.actual ?? localState.temp.bed;
     }
 
-    // Only push to simulation if we have MOTION 
-    // This prevents the head from snapping to (0,0,0) during temp updates.
-    if (isMotion && AppContext.stream) {
-      AppContext.stream.push({
-        pos: {
-          x: this.localState.x,
-          y: this.localState.y,
-          z: this.localState.z,
-          e: this.localState.e
-        },
-        temp: { ...this.localState.temp },
-        feedrate: this.localState.f,
-        progress: this.localState.progress,
-        cmdIndex: this.localState.cmdIndex,
-        is_extruding: this.localState.isExtruding,
+    // Progress
+    if (subTopic === 'progress/printing') {
+      localState.progress = data.progress ?? localState.progress;
+    }
+
+    // 3. Push to Instance Stream
+    if (isMotion && stream) {
+      stream.push({
+        pos: { x: localState.x, y: localState.y, z: localState.z, e: localState.e },
+        temp: { ...localState.temp },
+        feedrate: localState.f,
+        progress: localState.progress,
+        cmdIndex: localState.cmdIndex,
+        is_extruding: localState.isExtruding,
         timestamp: Date.now()
       });
     }

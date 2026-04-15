@@ -50,17 +50,19 @@ const MAX_TUBE_SEGMENTS = 50000; // in very old code it was 400, keep it if ther
 export class FilamentRenderer {
 
   /**
-   * @param {THREE.Scene} scene
+   * @param {THREE.Group} model  The specific printer group this renderer belongs to.
+   * @param {THREE.Scene} scene  The global scene.
    * @param {object}  [options]
    * @param {number}  [options.color]   Filament hex colour.
    * @param {number}  [options.width]   Initial extrusion width mm.
    * @param {number}  [options.height]  Initial layer height mm.
-   * @param {THREE.Group} [options.xGroup]  X_axis group reference (optional, will be found if not provided)
+   * @param {THREE.Vector3} [options.worldOffset] Offset of the printer in world space.
    */
-  constructor(scene, options = {}) {
+  constructor(model, scene, options = {}) {
+    this._model = model;
     this._scene = scene;
+    this._worldOffset = options.worldOffset || new THREE.Vector3(0, 0, 0);
     this._color = options.color ?? FILAMENT_COLOR;
-
     this._meshMat = new THREE.MeshStandardMaterial({
       color: this._color,
       roughness: 1.0,
@@ -76,7 +78,7 @@ export class FilamentRenderer {
     /** @type {THREE.Object3D | null} */
     this._tischNode = null;
     /** @type {THREE.Object3D | null} */
-    this._xGroup = options.xGroup || null;
+    this._xGroup = null;
     /** @type {THREE.Object3D | null} */
     this._nozzleNode = null; // Kept for potential fallback only
 
@@ -195,7 +197,7 @@ export class FilamentRenderer {
    * @private
    */
   _findNodes() {
-    this._scene.traverse((child) => {
+    this._model.traverse((child) => {
       if (child.name === 'Tisch') this._tischNode = child;
       if (child.name === 'Druckkopf') this._nozzleNode = child;
       // Auto-find X_axis if not provided
