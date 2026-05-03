@@ -94,11 +94,13 @@ export class MqttService {
    * @private
    */
   _handleMessage(topic, payload) {
+    const topicLower = topic.toLowerCase();
+    
     // 1. Find which machine this topic belongs to
     let target = null;
 
     for (const inst of this.instances.values()) {
-      if (topic.startsWith(inst.topicPrefix)) {
+      if (topicLower.startsWith(inst.topicPrefix.toLowerCase())) {
         target = inst;
         break;
       }
@@ -120,10 +122,10 @@ export class MqttService {
     let isMotion = false;
 
     // 2. Decode Topic
-    const subTopic = topic.replace(topicPrefix, '');
+    const subTopic = topicLower.replace(topicPrefix.toLowerCase(), '');
 
     // Motion
-    if (subTopic === 'motion' || topic === PRINTER_CONFIG.MQTT.TOPICS.MOTION) {
+    if (subTopic === 'motion' || topicLower === PRINTER_CONFIG.MQTT.TOPICS.MOTION?.toLowerCase()) {
       if (data.e !== undefined || data.is_extruding !== undefined) {
         const eDelta = data.e !== undefined ? (data.e - localState.e) : 0;
         localState.isExtruding = data.is_extruding ?? (eDelta > 0.001);

@@ -78,17 +78,6 @@ export const AppContext = {
   get engine()    { return this.printers[0]?.engine; },
   get filament()  { return this.printers[0]?.filament; },
 
-  /**
-   * Switches the first printer's mode.
-   * @param {'standalone'|'stream'} mode
-   */
-  async switchMode(mode) {
-    if (this.printers[0]) {
-      const { mqttService } = await import('./src/services/MqttService.js');
-      await this.printers[0].switchMode(mode, mqttService);
-    }
-  },
-
   // Dev tools (usually attached to the first printer)
   examples:    null,
 };

@@ -137,9 +137,7 @@ export class FilamentRenderer {
    * @returns {this}
    */
   reset() {
-    this._destroyGroup();
-    this._currentSeg = [];
-    this._segCount = 0;
+    this.clear();
     return this;
   }
 
@@ -151,8 +149,9 @@ export class FilamentRenderer {
   appendPoint() {
     if (!this._tischNode) return;
 
-    // Flush all dirty local transforms → world matrices
-    this._scene.updateWorldMatrix(true);
+    // Optimized: only update the matrix of this specific printer instance
+    // rather than the entire global scene.
+    this._model.updateWorldMatrix(true, true);
 
     // Get deposition point based on X_GROUP motion
     const worldPos = this._getDepositionWorldPos();

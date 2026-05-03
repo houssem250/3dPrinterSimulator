@@ -7,16 +7,20 @@
  */
 
 import { PrinterFrame } from './PrinterFrame.js';
+import { useFleetStore } from '../store/useFleetStore.js';
 
 export class PrinterState {
   /**
    * Initializes the state with default values.
+   * @param {number} id Unique identifier for this printer instance.
    * @param {number} historySize Max number of historical frames to keep.
    */
-  constructor(historySize = 100) {
+  constructor(id, historySize = 100) {
+    this.id = id;
     this.current = PrinterFrame.createDefault();
     this.historySize = historySize;
     this.history = []; // Ring buffer: most recent at the end
+    this.providerMode = 'standalone';
 
     /** @type {Function[]} */
     this.subscribers = [];
@@ -39,6 +43,10 @@ export class PrinterState {
     }
 
     this.current = frame;
+    
+    // Push to React Zustand Store (Side effect for Dashboard)
+    useFleetStore.getState().updatePrinter(this.id, this.getSummary());
+    
     this._notifySubscribers();
   }
 
@@ -48,6 +56,10 @@ export class PrinterState {
   reset() {
     this.current = PrinterFrame.createDefault();
     this.history = [];
+    
+    // Push Reset to React Dashboard
+    useFleetStore.getState().updatePrinter(this.id, this.getSummary());
+    
     this._notifySubscribers();
   }
 
@@ -83,9 +95,12 @@ export class PrinterState {
   getSummary() {
     return {
       pos: this.current.pos,
+      mode: this.providerMode,
       temp: this.current.temp,
-      isPrinting: this.current.status.isPrinting,
-      isHomed: this.current.status.isHomed,
+      status: {
+        isPrinting: this.current.status ? this.current.status.isPrinting : false,
+        isHomed: this.current.status ? this.current.status.isHomed : false
+      },
       layer: this.current.layer,
       historyCount: this.history.length
     };

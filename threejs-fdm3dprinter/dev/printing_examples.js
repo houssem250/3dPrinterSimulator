@@ -36,46 +36,63 @@ import { ModelDebugger }      from '../model/model_debugger.js';
 export class PrintingExamples {
 
   constructor() {
-    // Lazily created on first use so construction doesn't fail if the
-    // model hasn't finished loading.
+    // Current printer being targeted by the console
+    this._targetId = 0;
+
+    // Lazily created on first use
     this._dbg = null;
 
-    // Single FilamentRenderer reused across runs — reset() clears it each time
-    this._renderer = null;
-
-    console.log('PrintingExamples ready. Available commands:');
+    console.log('PrintingExamples ready. Multi-printer support enabled.');
+    console.log('   app.examples.target(id)      — switch active printer');
     console.log('   app.examples.square()        — 2-layer square');
     console.log('   app.examples.circle()        — 2-layer circle');
     console.log('   app.examples.tower()         — calibration tower');
-    console.log('   app.examples.manualMoves()   — raw move list');
-    console.log('   app.examples.fromString(gc)  — load G-code string');
-    console.log('   app.examples.fromURL(url)    — load .gcode file');
-    console.log('   app.examples.print()         — start the print');
-    console.log('   app.examples.dbg             — model inspection tools');
+    console.log('   app.examples.print()         — start simulation');
   }
 
-  // ── Accessors ───────────────────────────────────────────────────────────────
+  /**
+   * Sets the target printer for subsequent commands.
+   * @param {number} id 
+   * @returns {this}
+   */
+  target(id) {
+    if (!AppContext.printers[id]) {
+      console.error(`Invalid printer ID: ${id}. Only [0..${AppContext.printers.length - 1}] exist.`);
+      return this;
+    }
+    this._targetId = id;
+    console.log(`🎯 Targeting Printer #${id} (${AppContext.printers[id].id})`);
+    return this;
+  }
+
+  // ── Accessors (Printer Aware) ──────────────────────────────────────────────
+
+  get _instance() {
+    const p = AppContext.printers[this._targetId];
+    if (!p) throw new Error(`Printer #${this._targetId} not found.`);
+    return p;
+  }
 
   get _standalone() {
-    if (!AppContext.standalone) throw new Error('Standalone provider not ready — wait for model to load.');
-    return AppContext.standalone;
+    return this._instance.standalone;
+  }
+
+  get _filamentRenderer() {
+    return this._instance.filament;
   }
 
   get _scene() {
-    if (!AppContext.scene) throw new Error('scene not available.');
     return AppContext.scene;
   }
 
   /**
-   * Lazily initialised `ModelDebugger` instance.
-   * @type {ModelDebugger}
+   * Lazily initialised `ModelDebugger` instance for the current target.
    */
   get dbg() {
-    if (!this._dbg) {
-      if (!AppContext.modelLoader) throw new Error('modelLoader not ready.');
-      this._dbg = new ModelDebugger(AppContext.modelLoader);
-    }
-    return this._dbg;
+    // debugger always targets the current instance group
+    return new ModelDebugger({
+      _printerModel: this._instance.model
+    });
   }
 
   // ── Built-in print examples ─────────────────────────────────────────────────
@@ -184,6 +201,19 @@ G28
     this._standalone.resume();
   }
 
+  /** Switches the target printer to Stream (MQTT) Mode */
+  async stream() {
+    const { mqttService } = await import('../src/services/MqttService.js');
+    await this._instance.switchMode('stream', mqttService);
+    console.log(`📡 Printer #${this._targetId} is now LISTENING for Live Stream Telemetry.`);
+  }
+
+  /** Switches the target printer to Standalone (Local G-code) Mode */
+  async standalone() {
+    await this._instance.switchMode('standalone');
+    console.log(`🔌 Printer #${this._targetId} is now in STANDALONE mode.`);
+  }
+
   /**
    * Stops the current print.
    * @param {boolean} [andClear=false]  Also remove partial filament if true.
@@ -233,16 +263,8 @@ G28
     console.log(`Speed multiplier: ${multiplier}×`);
   }
 
-  /**
-   * Switches the G-code coordinate origin.
-   * @param {'corner'|'center'} mode
-   */
   placement(mode) {
-    if (mode !== 'corner' && mode !== 'center') {
-      console.warn('placement(): use "corner" or "center"');
-      return;
-    }
-    this._printer.placement = mode;
+    this._instance.state.placement = mode;
     console.log(`Placement: ${mode}`);
   }
 
@@ -251,11 +273,8 @@ G28
    * Useful for calibrating coordinate mappings.
    */
   where() {
-    const { modelLoader } = AppContext;
-    if (!modelLoader) { console.warn('modelLoader not ready.'); return; }
-
-    const bed    = modelLoader.findPartByName('Tisch');
-    const nozzle = modelLoader.findPartByName('Druckkopf');
+    const bed    = this._instance.findPart('Tisch');
+    const nozzle = this._instance.findPart('Druckkopf');
 
     if (bed) {
       bed.updateWorldMatrix(true, true);
@@ -289,8 +308,7 @@ G28
    */
   calcOffset() {
     console.log('\n--- 📏 Nozzle Offset Calibration ---');
-    const { modelLoader } = AppContext;
-    const bed = modelLoader.findPartByName('Tisch');
+    const bed = this._instance.findPart('Tisch');
     
     if (!bed) {
       console.error('Tisch (bed) not found.');
@@ -331,15 +349,6 @@ G28
 
   // ── Private ─────────────────────────────────────────────────────────────────
 
-  /**
-   * Returns the shared FilamentRenderer, creating it lazily on first use.
-   * Reused across all runs — executePath() calls reset() at the start of
-   * each run to clear the previous mesh before drawing new filament.
-   * @returns {FilamentRenderer}
-   */
-  get _filamentRenderer() {
-    return AppContext.filament;
-  }
 
   /**
    * Guards against double-run, wires the shared renderer, and executes.

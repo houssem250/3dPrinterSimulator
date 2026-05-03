@@ -18,14 +18,34 @@ export class SimulationEngine {
     this.filament = filament;
     
     this._lastIsExtruding = false;
+    this.frameQueue = [];
+    this.isProcessing = false;
   }
 
   /**
-   * Connects the engine to a state source.
+   * Connects the engine to a state source via a serialized queue.
    * @param {import('../core/PrinterState.js').PrinterState} state 
    */
   connect(state) {
-    state.subscribe((frame) => this._renderFrame(frame));
+    state.subscribe((frame) => {
+      this.frameQueue.push(frame);
+      this._processQueue();
+    });
+  }
+
+  /**
+   * Serialized worker that ensures frames are processed one after another.
+   * @private
+   */
+  async _processQueue() {
+    if (this.isProcessing || this.frameQueue.length === 0) return;
+    
+    this.isProcessing = true;
+    while (this.frameQueue.length > 0) {
+      const frame = this.frameQueue.shift();
+      await this._renderFrame(frame);
+    }
+    this.isProcessing = false;
   }
 
   /**

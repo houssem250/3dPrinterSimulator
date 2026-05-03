@@ -105,7 +105,7 @@ export function applyLoadedCameraPosition(camera) {
  *
  * @returns {THREE.WebGLRenderer}
  */
-export function createRenderer() {
+export function createRenderer(container = document.body) {
   const renderer = new THREE.WebGLRenderer({ antialias: RENDERER.ANTIALIAS });
 
   renderer.setSize(window.innerWidth, window.innerHeight);
@@ -115,7 +115,7 @@ export function createRenderer() {
     renderer.shadowMap.enabled = true;
   }
 
-  document.body.appendChild(renderer.domElement);
+  container.appendChild(renderer.domElement);
   return renderer;
 }
 
@@ -181,10 +181,10 @@ export function registerResizeHandler(camera, renderer) {
  *
  * const { scene, camera, renderer, controls } = bootstrapScene();
  */
-export function bootstrapScene() {
+export function bootstrapScene(container = document.body) {
   const scene    = createScene();
   const camera   = createCamera();
-  const renderer = createRenderer();
+  const renderer = createRenderer(container);
   const controls = createControls(camera, renderer);
 
   registerResizeHandler(camera, renderer);

@@ -39,7 +39,7 @@ export class PrinterInstance {
     });
 
     // 1. Initialise Core State & Logic
-    this.state = new PrinterState();
+    this.state = new PrinterState(id);
     this.normalizer = new FrameNormalizer(PRINTER_CONFIG);
     
     // 2. Initialise Motion Axes
@@ -70,8 +70,8 @@ export class PrinterInstance {
     this.stream.onFrame((f) => this.state.update(f));
 
     // 6. Register for MQTT Telemetry
-    // Prefix convention: 0 -> octoprint/ (default), Others -> printerN/
-    const prefix = (id === 0) ? "octoprint/" : `printer${id}/`;
+    // Prefix convention: 0 -> octoPrint/ (To match Custom Python Plugin), Others -> printerN/
+    const prefix = (id === 0) ? "octoPrint/" : `printer${id}/`;
     mqttService.registerPrinter(id, this.stream, prefix);
     console.log(`[Printer ${id}] 📡 Registered for MQTT prefix: ${prefix}`);
   }
@@ -94,6 +94,9 @@ export class PrinterInstance {
         await mqttService.connect();
       }
     }
+
+    this.state.providerMode = mode;
+    this.state.reset(); // Clear old state and push new mode to UI
 
     await this.currentProvider.start();
   }
