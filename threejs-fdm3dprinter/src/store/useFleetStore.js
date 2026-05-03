@@ -13,9 +13,38 @@ export const useFleetStore = create((set) => ({
   activePrinterId: null,
   isFleetInitialized: false,
 
+  // Fleet Hierarchy (from vanilla_ui)
+  fleetGroups: [
+    { id: "unassigned", groupName: "Unassigned Assets", isOpen: true, assets: [], canDelete: false },
+    { id: "g1", groupName: "Production Line A", isOpen: true, assets: [
+        { name: "Mach 01 - 3D Printer", id: 0 }
+    ], canDelete: true }
+  ],
+
+  // UI State
+  uiModals: {
+    configPane: false,
+    assetWizard: false,
+    globalAddMenu: false,
+    statusOptions: false
+  },
+
   // Actions
   setFleetInitialized: (val) => set({ isFleetInitialized: val }),
   
+  toggleModal: (modalName, forceState) => set((state) => ({
+    uiModals: {
+      ...state.uiModals,
+      [modalName]: forceState !== undefined ? forceState : !state.uiModals[modalName]
+    }
+  })),
+
+  toggleGroup: (groupId) => set((state) => ({
+    fleetGroups: state.fleetGroups.map(g => 
+      g.id === groupId ? { ...g, isOpen: !g.isOpen } : g
+    )
+  })),
+
   /**
    * Updates a specific printer's telemetry.
    * Called by PrinterState.js (Vanilla context)
@@ -39,5 +68,13 @@ export const useFleetStore = create((set) => ({
   /**
    * Clears the entire fleet state.
    */
-  clearFleet: () => set({ printers: {}, activePrinterId: null, isFleetInitialized: false })
+  clearFleet: () => set({ 
+    printers: {}, 
+    activePrinterId: null, 
+    isFleetInitialized: false,
+    fleetGroups: [
+      { id: "unassigned", groupName: "Unassigned Assets", isOpen: true, assets: [], canDelete: false }
+    ]
+  })
 }));
+

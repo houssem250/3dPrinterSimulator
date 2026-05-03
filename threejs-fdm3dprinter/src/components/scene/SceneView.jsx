@@ -21,16 +21,18 @@ const SceneView = () => {
     // Boot the farm
     system.init();
 
-    // Handle Window Resize
-    const handleResize = () => {
-      if (systemRef.current) {
-        systemRef.current.resize(window.innerWidth, window.innerHeight);
+    // Handle Window Resize via Observer to respect CSS Grid constraints
+    const resizeObserver = new ResizeObserver((entries) => {
+      for (let entry of entries) {
+        if (systemRef.current) {
+          systemRef.current.resize(entry.contentRect.width, entry.contentRect.height);
+        }
       }
-    };
-    window.addEventListener('resize', handleResize);
+    });
+    resizeObserver.observe(mountRef.current);
 
     return () => {
-      window.removeEventListener('resize', handleResize);
+      resizeObserver.disconnect();
       if (systemRef.current) {
         systemRef.current.dispose();
       }

@@ -1,13 +1,1170 @@
 @import "tailwindcss";
 
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
+:root {
+    --bg-main: #0c0c0c;
+    --bg-pane: rgba(22, 22, 22, 0.75);
+    --bg-rail: #050505;
+    --border: rgba(255, 255, 255, 0.08);
+    --accent-green: #00ffc2;
+    --accent-amber: #ffb800;
+    --accent-red: #ff4b4b;
+    --text-dim: #777;
+    --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
 }
 
+* { box-sizing: border-box; }
 body {
-  overflow: hidden;
-  background: #000;
-  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    margin: 0;
+    padding: 0;
+    background: var(--bg-main);
+    color: #e0e0e0;
+    font-family: 'Inter', -apple-system, sans-serif;
+    height: 100vh;
+    overflow: hidden;
+}
+
+#app {
+    height: 100vh;
+    width: 100vw;
+}
+
+.canvas-viewport {
+    grid-area: center;
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+}
+
+/* Layout Hierarchy */
+.dashboard-grid {
+    display: grid;
+    grid-template-areas: 
+        "header header header"
+        "side center right"
+        "footer footer footer";
+    grid-template-columns: 320px 1fr 340px;
+    grid-template-rows: 40px 1fr 30px;
+    height: 100vh;
+}
+
+/* 1. Top Bar */
+.top-bar {
+    grid-area: header;
+    background: #111;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    padding: 0 15px;
+    font-size: 11px;
+    justify-content: space-between;
+}
+
+.led { color: var(--accent-green); text-shadow: 0 0 5px var(--accent-green); }
+
+/* 2. Left Sidebar & Tree */
+.left-sidebar {
+    grid-area: side;
+    display: flex;
+    border-right: 1px solid var(--border);
+    background: var(--bg-rail);
+}
+
+.icon-rail {
+    width: 50px;
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 20px;
+    padding-top: 15px;
+}
+
+.nav-icon { font-size: 18px; color: var(--text-dim); cursor: pointer; }
+.nav-icon.active { color: var(--accent-green); border-left: 2px solid var(--accent-green); padding-left: 5px; }
+
+.fleet-manager { flex: 1; padding: 10px; }
+/* The Anchor */
+.fleet-manager .pane-header {
+    position: relative; /* CRITICAL: This traps the absolute menu inside the header */
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+/* The Menu */
+#global-add-menu {
+    position: absolute;
+    top: 100%;    /* Places it directly below the header */
+    right: 0;     /* Aligns it to the right edge of the header */
+    left: auto;   /* Overrides any default left alignment */
+    width: 140px;
+    margin-top: -15px;
+    display: none; /* Controlled by JS */
+    z-index: 1001; /* Ensure it stays above tree nodes */
+}
+.search-box input {
+    width: 100%;
+    background: #000;
+    border: 1px solid var(--border);
+    color: white;
+    padding: 5px 10px;
+    font-size: 12px;
+    border-radius: 4px;
+}
+
+/* 3. Canvas & Floating Panes */
+.canvas-viewport {
+    grid-area: center;
+    position: relative;
+    background: radial-gradient(circle, #1a1a1a 0%, #000 100%);
+}
+
+.floating-pane {
+    position: absolute;
+    background: var(--bg-pane);
+    backdrop-filter: blur(10px);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    z-index: 10;
+}
+
+.telemetry-hud {
+    top: 20px;
+    right: 20px;
+    padding: 15px;
+    width: 180px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+}
+
+.data-row { display: flex; justify-content: space-between; margin-bottom: 5px; }
+.status-amber { color: var(--accent-amber); }
+.status-green { color: var(--accent-green); }
+
+
+/* 1. The Terminal Container */
+.gcode-terminal {
+    bottom: 20px;
+    left: 5px;
+    width: 380px; /* Slightly wider for better readability */
+    height: 160px; /* Increased height */
+    background: rgba(5, 10, 5, 0.85); /* Darker, slightly green-tinted background */
+    border: 1px solid rgba(0, 255, 194, 0.2); /* Tinted border */
+    box-shadow: 0 0 20px rgba(0, 0, 0, 0.5), inset 0 0 10px rgba(0, 255, 194, 0.05);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+/* 2. The Output Area */
+#terminal-output {
+    margin: 0;
+    padding: 12px;
+    font-size: 11px;
+    line-height: 1.4;
+    font-family: var(--font-mono);
+    color: var(--accent-green);
+    text-shadow: 0 0 5px rgba(0, 255, 194, 0.5); /* Glowing text effect */
+    overflow-y: auto;
+    flex: 1;
+    position: relative;
+    background: repeating-linear-gradient(
+        0deg,
+        rgba(0, 0, 0, 0.1) 0px,
+        rgba(0, 0, 0, 0.1) 1px,
+        transparent 1px,
+        transparent 2px
+    ); /* Subtle scanline texture */
+}
+
+/* 3. Custom Scrollbar for the Terminal */
+#terminal-output::-webkit-scrollbar {
+    width: 4px;
+}
+
+#terminal-output::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.02);
+}
+
+#terminal-output::-webkit-scrollbar-thumb {
+    background: var(--accent-green);
+    border-radius: 2px;
+    box-shadow: 0 0 5px var(--accent-green);
+}
+
+/* 4. Timestamp & System Tags */
+#terminal-output span {
+    opacity: 0.6;
+    margin-right: 8px;
+    font-weight: 300;
+}
+
+/* 5. Terminal Header Refinement */
+.gcode-terminal .pane-header {
+    background: rgba(0, 255, 194, 0.05);
+    padding: 6px 12px;
+    font-size: 10px;
+    letter-spacing: 1px;
+    border-bottom: 1px solid var(--border);
+}
+
+/* 4. Right Rail Widgets */
+.right-rail {
+    grid-area: right;
+    background: var(--bg-rail);
+    border-left: 1px solid var(--border);
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    overflow-y: auto;
+}
+
+.sub-pane {
+    background: #111;
+    border: 1px solid var(--border);
+    padding: 10px;
+    border-radius: 4px;
+}
+
+.sub-pane h6 { margin: 0 0 10px 0; font-size: 9px; color: var(--text-dim); text-transform: uppercase; }
+
+.alert { 
+    font-size: 11px; 
+    padding: 8px; 
+    border-radius: 3px; 
+    margin-bottom: 5px; 
+    background: rgba(255,255,255,0.03); 
+}
+.alert.critical { border-left: 3px solid var(--accent-red); }
+.alert.warning { border-left: 3px solid var(--accent-amber); }
+/* --- Expandable Alert Feed --- */
+.alert-feed {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.alert-item {
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: 4px;
+    border: 1px solid var(--border);
+    overflow: hidden; /* Clips the detail section when closed */
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    cursor: pointer;
+}
+
+.alert-header {
+    padding: 10px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 11px;
+}
+
+.alert-detail {
+    max-height: 0; /* Hidden by default */
+    overflow: hidden;
+    padding: 0 10px;
+    font-size: 10px;
+    color: var(--text-dim);
+    line-height: 1.5;
+    transition: all 0.3s ease;
+    background: rgba(0, 0, 0, 0.2);
+}
+
+/* Expansion State */
+.alert-item.expanded {
+    border-color: rgba(255, 255, 255, 0.2);
+    background: rgba(255, 255, 255, 0.06);
+}
+
+.alert-item.expanded .alert-detail {
+    max-height: 200px; /* Large enough for detailed text */
+    padding: 10px;
+    border-top: 1px solid var(--border);
+}
+/*
+.alert-item.critical { border-left: 3px solid var(--accent-red); }
+.alert-item.warning { border-left: 3px solid var(--accent-amber); }
+*/
+.expand-icon {
+    font-size: 8px;
+    transition: transform 0.3s;
+}
+
+.alert-item.expanded .expand-icon {
+    transform: rotate(180deg);
+}
+
+/* 5. Footer */
+.system-footer {
+    grid-area: footer;
+    background: #000;
+    border-top: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0 15px;
+    font-size: 10px;
+    color: var(--text-dim);
+}
+/* Dropdown Logic */
+.status-menu-container { position: relative; cursor: pointer; }
+
+.status-trigger {
+    padding: 4px 10px;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+}
+
+.status-dropdown {
+    position: absolute;
+    top: 35px;
+    left: 0;
+    width: 180px;
+    background: #111;
+    border: 1px solid var(--border);
+    list-style: none;
+    padding: 5px 0;
+    display: none; /* Toggled via JS */
+    z-index: 100;
+}
+
+.status-dropdown li {
+    padding: 8px 15px;
+    font-size: 11px;
+}
+
+.status-dropdown li:hover { background: var(--accent-green); color: #000; }
+
+/* Config Modal Styling */
+.config-modal {
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    width: 320px;
+    padding: 20px;
+}
+
+.config-body label { display: block; font-size: 10px; color: var(--text-dim); margin-top: 10px; }
+.config-body input { 
+    width: 100%; background: #000; border: 1px solid var(--border); 
+    color: #fff; padding: 5px; margin-bottom: 10px; 
+}
+
+
+.test-idle { font-size: 10px; color: var(--text-dim); font-style: italic; }
+.test-running { color: var(--accent-amber); animation: blink 1s infinite; }
+
+
+
+/* Header styling for the X button */
+.pane-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 8px;
+    margin-bottom: 15px;
+}
+
+.close-x-btn {
+    cursor: pointer;
+    font-size: 18px;
+    color: var(--text-dim);
+    transition: color 0.2s;
+}
+
+.close-x-btn:hover { color: var(--accent-red); }
+
+/* Footer Action Bar */
+.modal-footer {
+    display: flex;
+    gap: 10px;
+    margin-top: 20px;
+}
+
+.action-btn {
+    flex: 2; /* Primary action is wider */
+    background: var(--accent-green);
+    border: none;
+    padding: 10px;
+    font-weight: bold;
+    cursor: pointer;
+    color: #000;
+}
+
+.secondary-btn {
+    flex: 1;
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text-main);
+    cursor: pointer;
+    font-size: 11px;
+}
+
+.secondary-btn:hover {
+    background: rgba(255, 255, 255, 0.05);
+}
+/* Fleet Icons */
+.add-btn { cursor: pointer; color: var(--accent-green); font-weight: bold; font-size: 14px; float: right; }
+.asset-actions { display: none; gap: 8px; margin-left: auto; padding-right: 5px; }
+.action-icon { cursor: pointer; font-size: 10px; opacity: 0.6; transition: 0.2s; }
+.action-icon:hover { opacity: 1; }
+
+/* Wizard Tabs */
+.wizard-tabs { display: flex; border-bottom: 1px solid var(--border); margin-bottom: 15px; }
+.tab-btn { 
+    flex: 1; padding: 10px; text-align: center; font-size: 10px; 
+    text-transform: uppercase; cursor: pointer; border-bottom: 2px solid transparent;
+}
+.tab-btn.active { border-bottom: 2px solid var(--accent-green); color: var(--accent-green); }
+
+.tab-pane { display: none; }
+.tab-pane.active { display: block; }
+
+.scrollable { max-height: 300px; overflow-y: auto; padding-right: 5px; }
+.input-row { display: flex; gap: 10px; }
+.input-row div { flex: 1; }
+
+/* Dropdown styling for Groups */
+/* Ensure the + sign stays pinned right in the group header */
+.group-node {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 5px 0;
+    user-select: none;
+}
+
+.asset-actions {
+    margin-left: auto;
+    display: none; /* Hidden by default */
+}
+
+/* --- Optimized Fleet Tree --- */
+.tree-node {
+    /* Layout & Alignment */
+    display: flex !important;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    min-height: 32px; /* Set a consistent height to prevent "jitter" */
+    
+    /* Styling */
+    position: relative;
+    padding: 6px 10px;
+    font-size: 11px;
+    border-radius: 4px;
+    transition: background 0.2s ease;
+    cursor: default;
+}
+
+.tree-node:hover {
+    background: rgba(255, 255, 255, 0.05);
+}
+
+/* Asset Name Logic */
+.tree-node > span {
+    flex: 1; /* Takes up all available space */
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-right: 15px; /* Ensures text never touches the three dots */
+    color: #ccc;
+}
+
+/* Three Dots Container */
+.asset-actions {
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+    margin-left: auto;
+    
+    /* Visibility Control */
+    visibility: hidden;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+    background: transparent !important; /* Forces removal of any black box */
+}
+
+/* Show actions on hover OR if the context menu inside is being interacted with */
+.tree-node:hover .asset-actions,
+.tree-node:focus-within .asset-actions,
+.tree-node:active .asset-actions {
+    visibility: visible;
+    opacity: 1;
+}
+
+/* Individual Icon Styling */
+.three-dots {
+    cursor: pointer;
+    padding: 0 5px;
+    font-size: 18px;
+    color: var(--text-dim);
+    line-height: 1;
+    transition: color 0.2s;
+    outline: none;
+}
+
+.three-dots:hover {
+    color: var(--accent-green);
+}
+
+.action-icon {
+    padding: 0 4px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: transform 0.1s;
+}
+
+.action-icon:hover {
+    transform: scale(1.2);
+}
+
+/* Ensure actions are clickable and spaced correctly */
+.asset-actions {
+    display: none; 
+    gap: 12px; /* Increased gap for easier clicking */
+    margin-left: auto;
+    padding-right: 10px;
+    background: linear-gradient(to left, var(--bg-rail) 80%, transparent); /* Fade background for icons */
+}
+
+.action-icon {
+    font-size: 13px; /* Slightly larger icons */
+    opacity: 0.5;
+}
+
+.action-icon:hover {
+    opacity: 1;
+    transform: scale(1.15);
+}
+
+
+/* Fleet Manager Enhancements */
+.group-node {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid transparent;
+    padding: 8px 10px;
+    margin-bottom: 2px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-weight: 600;
+    font-size: 11px;
+    letter-spacing: 0.5px;
+    color: #fff;
+    transition: 0.2s;
+}
+
+.group-node:hover {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: var(--border);
+}
+
+.group-node::before {
+    content: ''; /* FontAwesome or Unicode Arrow */
+    font-size: 8px;
+    margin-right: 8px;
+    color: var(--text-dim);
+    transition: transform 0.2s;
+}
+
+.group-node.open::before {
+    transform: rotate(90deg);
+    color: var(--accent-green);
+}
+
+/* Inline Group Input */
+.inline-input-container {
+    padding: 5px 10px;
+    background: #000;
+    border: 1px solid var(--accent-green);
+    display: flex;
+    gap: 5px;
+}
+
+.inline-input-container input {
+    background: transparent;
+    border: none;
+    color: white;
+    font-size: 11px;
+    flex: 1;
+    outline: none;
+}
+
+.tiny-btn {
+    cursor: pointer;
+    font-size: 10px;
+    padding: 2px 5px;
+    border-radius: 2px;
+}
+
+.btn-ok { background: var(--accent-green); color: #000; }
+.btn-cancel { color: var(--text-dim); }
+
+
+
+/* --- New Operational Styles --- */
+.asset-actions { position: relative; }
+
+.three-dots {
+    cursor: pointer;
+    padding: 0 8px;
+    font-size: 18px;
+    color: var(--text-dim);
+    transition: color 0.2s;
+}
+
+.three-dots:hover { color: white; }
+
+.asset-context-menu {
+    margin: 0; /* Add this */
+    position: absolute;
+    right: 0;
+    top: 25px;
+    background: #111;
+    border: 1px solid var(--border);
+    list-style: none;
+    padding: 5px 0;
+    z-index: 1000;
+    width: 160px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+}
+
+.asset-context-menu li {
+    padding: 8px 12px;
+    font-size: 11px;
+    cursor: pointer;
+    color: #ccc;
+}
+
+.asset-context-menu li:hover {
+    background: var(--accent-green);
+    color: #000;
+}
+
+/* Operational Pane */
+.print-control-body {
+    padding: 15px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.progress-bar-container {
+    background: #1a1a1a;
+    height: 6px;
+    border-radius: 3px;
+    overflow: hidden;
+    margin: 10px 0;
+    border: 1px solid var(--border);
+}
+
+.progress-fill {
+    height: 100%;
+    background: var(--accent-green);
+    width: 0%;
+    transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 0 10px var(--accent-green);
+}
+
+.control-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+}
+
+.control-grid button {
+    padding: 12px;
+    font-size: 10px;
+    font-weight: bold;
+    text-transform: uppercase;
+}
+
+.btn-start { background: var(--accent-green); color: #000; border: none; cursor: pointer; }
+.btn-abort { background: var(--accent-red); color: #fff; border: none; cursor: pointer; }
+
+/* Rail Icon Animation */
+@keyframes pulse-green {
+    0% { color: var(--accent-green); }
+    50% { color: #fff; }
+    100% { color: var(--accent-green); }
+}
+#rail-printer-icon.printing {
+    animation: pulse-green 2s infinite;
+}
+
+
+
+.asset-actions {
+    /* Change 'display: none' to 'visibility: hidden' */
+    /* This keeps the dots in the layout so they occupy space, but keeps them invisible */
+    display: flex; 
+    visibility: hidden; 
+    flex-shrink: 0;
+    margin-left: 10px;
+}
+
+
+.asset-actions {
+    /* Use visibility instead of display to prevent the "hover shift" */
+    display: flex;
+    visibility: hidden;
+    /* Pushes the dots to the absolute end of the flex container */
+    margin-left: auto; 
+    flex-shrink: 0;
+    align-items: center;
+}
+
+
+
+.three-dots {
+    cursor: pointer;
+    /* Increased padding for a larger click target at the edge */
+    padding: 0 5px; 
+    font-size: 18px;
+    color: var(--text-dim);
+    line-height: 1;
+    transition: color 0.2s;
+}
+
+.three-dots:hover {
+    color: white;
+}
+
+
+
+/* Status Text Colors & Glows */
+.status-text {
+    font-weight: bold;
+    transition: all 0.3s ease;
+}
+
+.status-text.green { 
+    color: var(--accent-green); 
+    text-shadow: 0 0 8px rgba(0, 255, 194, 0.6); 
+}
+
+.status-text.amber { 
+    color: var(--accent-amber); 
+    text-shadow: 0 0 8px rgba(255, 184, 0, 0.6); 
+}
+
+.status-text.red { 
+    color: var(--accent-red); 
+    text-shadow: 0 0 8px rgba(255, 75, 75, 0.6); 
+}
+
+/* Optional: Make the trigger pulse slightly when disconnected/warning */
+.status-trigger:has(.red), .status-trigger:has(.amber) {
+    border-color: rgba(255, 75, 75, 0.3);
+    animation: status-border-pulse 2s infinite;
+}
+
+@keyframes status-border-pulse {
+    0% { border-color: rgba(255, 75, 75, 0.2); }
+    50% { border-color: rgba(255, 75, 75, 0.6); }
+    100% { border-color: rgba(255, 75, 75, 0.2); }
+}
+
+
+
+.file-metadata-pane {
+    margin-top: 15px;
+    padding: 12px;
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    font-family: var(--font-mono);
+}
+
+.meta-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 10px;
+    margin-bottom: 4px;
+    color: var(--text-dim);
+}
+
+.meta-row span:last-child {
+    color: var(--accent-green);
+    font-weight: bold;
+}
+
+/* Add a scanline effect when data is "loading" */
+.parsing-active {
+    animation: text-flicker 0.1s infinite alternate;
+}
+
+@keyframes text-flicker {
+    from { opacity: 0.7; }
+    to { opacity: 1; }
+}
+
+
+/* printing menu */
+
+/* Tab Navigation */
+.control-tabs {
+    display: flex;
+    border-bottom: 1px solid var(--border);
+    background: rgba(255,255,255,0.02);
+}
+
+.tab {
+    flex: 1;
+    padding: 10px;
+    text-align: center;
+    font-size: 10px;
+    letter-spacing: 1px;
+    cursor: pointer;
+    color: var(--text-dim);
+    transition: all 0.3s;
+}
+
+.tab.active {
+    color: var(--accent-green);
+    background: rgba(0, 255, 194, 0.05);
+    border-bottom: 2px solid var(--accent-green);
+}
+
+/* Tab Content Visibility */
+.tab-content { display: none; }
+.tab-content.active { display: block; }
+
+/* Calibration Specifics */
+.calibration-info {
+    font-size: 11px;
+    color: var(--text-dim);
+    line-height: 1.4;
+    padding: 10px;
+    background: rgba(0,0,0,0.2);
+    border-radius: 4px;
+    margin-bottom: 15px;
+}
+
+.calibration-options {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.check-container {
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+    font-size: 11px;
+    color: #ccc;
+    user-select: none;
+}
+
+.check-container input { display: none; }
+
+.checkmark {
+    height: 14px;
+    width: 14px;
+    background-color: transparent;
+    border: 1px solid var(--accent-green);
+    margin-right: 10px;
+    display: inline-block;
+    position: relative;
+}
+
+.check-container input:checked + .checkmark:after {
+    content: "";
+    position: absolute;
+    left: 4px;
+    top: 1px;
+    width: 3px;
+    height: 7px;
+    border: solid var(--accent-green);
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg);
+}
+
+.est-time {
+    margin-top: 15px;
+    font-size: 10px;
+    color: var(--text-dim);
+    text-align: right;
+}
+
+
+.event-timeline {
+    margin-top: 15px;
+    padding-left: 15px;
+    border-left: 1px solid var(--border);
+    position: relative;
+}
+
+.event-point {
+    position: relative;
+    padding-bottom: 15px;
+    font-size: 11px;
+}
+
+.event-point::before {
+    content: "";
+    position: absolute;
+    left: -19px;
+    top: 2px;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--border);
+}
+
+.event-point.completed::before { background: var(--accent-green); box-shadow: 0 0 5px var(--accent-green); }
+.event-point.current::before { background: var(--accent-amber); animation: pulse-amber 1.5s infinite; }
+
+@keyframes pulse-amber { 
+    0% { transform: scale(1); opacity: 1; } 
+    50% { transform: scale(1.5); opacity: 0.5; } 
+    100% { transform: scale(1); opacity: 1; } 
+}
+
+
+
+
+/* --- Multi-Stage Alert Feed --- */
+.alert-item {
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: 4px;
+    border: 1px solid var(--border);
+    overflow: hidden;
+    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    cursor: pointer;
+    max-height: 38px; /* Height of header only */
+    margin-bottom: 8px;
+}
+
+/* Stage 1: Basic Expansion (Details) */
+.alert-item.expanded {
+    max-height: 180px; 
+    background: rgba(255, 255, 255, 0.06);
+}
+
+/* Stage 2: Deep Expansion (Fix Wizard) */
+.alert-item.fixing {
+    max-height: 500px; /* Large enough for steps */
+    border-color: var(--accent-green);
+    box-shadow: 0 0 15px rgba(0, 255, 194, 0.1);
+}
+
+.alert-detail {
+    padding: 12px;
+    font-size: 10px;
+    border-top: 1px solid var(--border);
+}
+
+/* The Wizard Pane - Hidden by default */
+.fix-wizard-pane {
+    display: none; 
+    padding: 12px;
+    background: rgba(0, 255, 194, 0.03);
+    border-top: 1px dashed var(--accent-green);
+    animation: slideDown 0.3s ease-out;
+}
+
+/* Reveal wizard only when .fixing class is present */
+.alert-item.fixing .fix-wizard-pane {
+    display: block;
+}
+
+/* Hide the initial "Fix Now" button once fixing starts */
+.alert-item.fixing .initial-fix-btn {
+    display: none;
+}
+
+@keyframes slideDown {
+    from { opacity: 0; transform: translateY(-10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+
+.timeline-wrapper {
+    margin-top: 20px;
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+.event-timeline {
+    position: relative;
+    padding-left: 20px;
+    margin-left: 10px;
+    border-left: 1px solid var(--border);
+}
+
+.event-point {
+    position: relative;
+    padding-bottom: 20px;
+}
+
+/* The Dot on the line */
+.event-point::before {
+    content: "";
+    position: absolute;
+    left: -24px;
+    top: 4px;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #333;
+    border: 1px solid var(--bg-rail);
+    z-index: 2;
+}
+
+.event-point.completed::before {
+    background: var(--accent-green);
+    box-shadow: 0 0 8px var(--accent-green);
+}
+
+.event-point.current::before {
+    background: var(--accent-amber);
+    animation: pulse-dot 1.5s infinite;
+}
+
+.event-time {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    color: var(--text-dim);
+    margin-bottom: 2px;
+}
+
+.event-desc {
+    font-size: 11px;
+    color: #eee;
+}
+
+@keyframes pulse-dot {
+    0% { transform: scale(1); opacity: 1; }
+    50% { transform: scale(1.4); opacity: 0.5; }
+    100% { transform: scale(1); opacity: 1; }
+}
+
+
+.timeline-horizontal-container {
+    width: 100%;
+    padding: 20px;
+    background: rgba(0, 0, 0, 0.4);
+    border-top: 1px solid var(--border);
+    overflow-x: auto;
+}
+
+.timeline-h {
+    display: flex;
+    align-items: flex-start;
+    gap: 0; /* Gap is handled by the item width */
+    min-width: max-content;
+    padding-top: 10px;
+}
+
+.event-point-h {
+    position: relative;
+    flex: 0 0 160px; /* Fixed width for each step */
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+}
+
+/* The Horizontal Connecting Line */
+.event-point-h::after {
+    content: "";
+    position: absolute;
+    top: 5px; /* Aligned with the center of the dot */
+    left: 50%;
+    width: 100%;
+    height: 1px;
+    background: var(--border);
+    z-index: 1;
+}
+
+/* Remove line from the very last item */
+.event-point-h:last-child::after {
+    display: none;
+}
+
+/* The Dot */
+.dot-h {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #333;
+    border: 2px solid var(--bg-main);
+    position: relative;
+    z-index: 2;
+    margin-bottom: 10px;
+    transition: all 0.3s ease;
+}
+
+.event-point-h.completed .dot-h {
+    background: var(--accent-green);
+    box-shadow: 0 0 8px var(--accent-green);
+}
+
+.event-point-h.current .dot-h {
+    background: var(--accent-amber);
+    animation: pulse-dot 1.5s infinite;
+}
+
+.event-point-h.completed::after {
+    background: var(--accent-green);
+}
+
+.time-h {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    color: var(--text-dim);
+    margin-bottom: 4px;
+}
+
+.desc-h {
+    font-size: 10px;
+    color: #ccc;
+    padding: 0 10px;
+    line-height: 1.2;
+}
+
+
+/* Position the timeline at the bottom of the Main viewport */
+.canvas-viewport .timeline-wrapper {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    width: 100%;
+    background: rgba(5, 5, 5, 0.85); /* Dark semi-transparent background */
+    backdrop-filter: blur(8px);     /* Modern frosted glass look */
+    border-top: 1px solid var(--border);
+    z-index: 5;                     /* Above the 3D canvas, below the G-Code terminal */
+    margin: 0;                      /* Remove any auto-margins */
+    padding: 10px;
+    height: auto;                  /* Fixed height for the ribbon */
+}
+
+/* Ensure the horizontal content fits inside the wrapper */
+.timeline-h {
+    display: flex;
+    align-items: center;
+    padding: 10px 20px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    height: 100%;
+}
+
+/* Hide scrollbar but keep functionality */
+.timeline-h::-webkit-scrollbar {
+    height: 2px;
+}
+.timeline-h::-webkit-scrollbar-thumb {
+    background: var(--accent-green);
+}
+
+/* Adjust the G-Code terminal position so it doesn't overlap the timeline */
+.gcode-terminal {
+    bottom: 140px !important; /* Lifted up slightly to sit above the timeline */
 }
