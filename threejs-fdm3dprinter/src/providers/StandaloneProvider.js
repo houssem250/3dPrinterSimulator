@@ -183,7 +183,8 @@ export class StandaloneProvider extends BaseProvider {
         is_extruding: extruding,
         feedrate: this.state.f,
         layer: this.state.currentLayer,
-        duration: duration // Engine can use this to know how long the move takes
+        progress: Math.round(((this.currentIndex + 1) / this.moves.length) * 100),
+        duration: duration
       });
 
       await this._delay(duration);

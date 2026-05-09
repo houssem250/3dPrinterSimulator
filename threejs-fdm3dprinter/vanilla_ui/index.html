@@ -13,7 +13,7 @@
             <!-- <div class="sync-indicator">Digital Twin Sync: <span class="led">REAL-TIME</span></div> -->
             <div class="status-menu-container">
                 <div class="status-trigger" id="status-display">
-                    Digital Twin: <span class="status-text green">CONNECTED</span> ▾
+                    Mode: <span class="status-text green">CONNECTED</span> ▾
                 </div>
                 <ul class="status-dropdown" id="status-options">
                     <li data-action="disconnect">Disconnect</li>
@@ -22,6 +22,8 @@
                 </ul>
             </div>
 
+            <div class="user-meta">Service Manager: houssem250 | <span class="view-mode">Technician View</span></div>
+        </header>
             <div class="floating-pane config-modal" id="config-pane" style="display:none;">
                 <div class="pane-header">
                     CONNECT TO OCTOPRINT 
@@ -43,29 +45,6 @@
                     </div>
                 </div>
             </div>
-            <div class="user-meta">Service Manager: houssem250 | <span class="view-mode">Technician View</span></div>
-        </header>
-
-        <aside class="left-sidebar">
-            <nav class="icon-rail">
-                <div class="nav-icon active">⬢</div>
-                <div class="nav-icon">⚀</div>
-                <div class="nav-icon">⚙</div>
-            </nav>
-            <section class="pane fleet-manager">
-                <div class="pane-header" style="position: relative;"> <!-- Added relative for dropdown positioning -->
-                    FLEET NAVIGATION 
-                    <span class="add-btn" id="global-add-fleet" title="Add Group or Asset">+</span>
-                    <ul class="status-dropdown" id="global-add-menu" style="display:none; position: absolute; top: 35px; right: 0; width: 140px; z-index: 100;">
-                        <li onclick="openWizard()">+ New Asset</li>
-                        <li onclick="showInlineGroupInput()">+ New Group</li>
-                    </ul>
-                </div>
-                <div class="search-box"><input type="text" placeholder=" Search nodes..."></div>
-                <div class="tree-container" id="fleet-tree">
-                    </div>
-            </section>
-
             <div class="floating-pane config-modal" id="asset-wizard" style="display:none;">
                 <div class="pane-header">
                     NEW ASSET CONFIGURATION
@@ -116,6 +95,76 @@
                     </div>
                 </div>
             </div>
+        <aside class="left-sidebar">
+            <button class="pane-toggle-btn" id="toggle-left" onclick="togglePane('left')">◀</button>
+            <nav class="icon-rail">
+                <div class="nav-icon active">⬢</div>
+                <div class="nav-icon">⚀</div>
+                <div class="nav-icon">⚙</div>
+            </nav>
+            <section class="pane fleet-manager">
+                <div class="pane-header" style="position: relative;"> <!-- Added relative for dropdown positioning -->
+                    FLEET NAVIGATION 
+                    <span class="add-btn" id="global-add-fleet" title="Add Group or Asset">+</span>
+                    <ul class="status-dropdown" id="global-add-menu" style="display:none; position: absolute; top: 35px; right: 0; width: 140px; z-index: 100;">
+                        <li onclick="openWizard()">+ New Asset</li>
+                        <li onclick="showInlineGroupInput()">+ New Group</li>
+                    </ul>
+                </div>
+                <div class="search-box"><input type="text" placeholder=" Search nodes..."></div>
+                <div class="tree-container" id="fleet-tree">
+                    </div>
+            </section>
+
+        <!--     <div class="floating-pane config-modal" id="asset-wizard" style="display:none;">
+                <div class="pane-header">
+                    NEW ASSET CONFIGURATION
+                    <span class="close-x-btn" id="wizard-close">×</span>
+                </div>
+
+                <nav class="wizard-tabs">
+                    <div class="tab-btn active" data-tab="printer-tab">Printer</div>
+                    <div class="tab-btn" data-tab="filament-tab">Filament</div>
+                </nav>
+
+                <div class="wizard-content">
+                    <div class="tab-pane active" id="printer-tab">
+                        <div class="config-body scrollable">
+                            <label>Printer ID</label>
+                            <input type="text" id="wizard-asset-name" placeholder="PRINTER_01"> 
+                            <label>Model</label>
+                            <input type="text" id="wizard-asset-model" placeholder="BCN3D+ Custom">
+                            <div class="input-row">
+                                <div><label>Build X</label><input type="number" id="wizard-x" value="200"></div>
+                                <div><label>Build Y</label><input type="number" id="wizard-y" value="200"></div>
+                                <div><label>Build Z</label><input type="number" id="wizard-z" value="200"></div>
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button class="action-btn next-tab">Next: Filament</button>
+                        </div>
+                    </div>
+
+                    <div class="tab-pane" id="filament-tab">
+                        <div class="config-body scrollable">
+                            <div class="input-row">
+                                <div><label>Material</label><input type="text" value="PLA"></div>
+                                <div><label>Diameter</label><input type="number" value="1.75"></div>
+                            </div>
+                            <label>Color</label>
+                            <input type="color" value="#FF6B6B" style="height:30px">
+                            <label>Optimal Nozzle Temp</label>
+                            <input type="number" value="205">
+                            <label>Retraction Distance (mm)</label>
+                            <input type="number" value="5.0">
+                        </div>
+                        <div class="modal-footer">
+                            <button class="secondary-btn prev-tab">Back</button>
+                            <button class="action-btn" id="finish-asset">Add Asset</button>
+                        </div>
+                    </div>
+                </div>
+            </div> -->
         </aside>
 
         <main class="canvas-viewport">
@@ -135,6 +184,7 @@
                 <pre id="terminal-output"></pre>
             </div>
             <div class="sub-pane timeline-wrapper">
+                <button class="pane-toggle-btn" id="toggle-bottom" onclick="togglePane('bottom')">▼</button>
                 <div class="pane-header">
                     <span class="led">LOG</span>
                     <h6>SESSION TIMELINE</h6>
@@ -146,6 +196,7 @@
         </main>
 
         <aside class="right-rail">
+            <button class="pane-toggle-btn" id="toggle-right" onclick="togglePane('right')">▶</button>
             <div class="pane-header">AI PREDICTIVE HEALTH RAIL</div>
             
             <section class="sub-pane alerts-feed">
@@ -170,8 +221,8 @@
                 <div class="donut-container">
                     <canvas id="health-donut"></canvas>
                     <div class="donut-stats">
-                        <p>Health: 85%</p>
-                        <p>Open Tickets: 3</p>
+                        <p style="margin:10px 0">Health: 85%</p>
+                        <p style="margin:10px 0">Open Tickets: 3</p>
                     </div>
                 </div>
             </section>

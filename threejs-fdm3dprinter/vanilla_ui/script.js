@@ -200,6 +200,130 @@ function renderFleet() {
 
 // updated function : 
 
+// function switchToPrintMode(assetId) {
+//     const asset = findAsset(assetId);
+//     if (!asset) return;
+//     activePrintJob.targetAsset = asset;
+
+//     const pane = document.querySelector('.fleet-manager');
+//     pane.innerHTML = `
+//         <div class="pane-header">
+//             <span>CONTROL: ${asset.name}</span>
+//             <span class="close-x-btn" onclick="exitPrintMode()">×</span>
+//         </div>
+        
+//         <!-- Tab Navigation -->
+//         <div class="control-tabs">
+//             <div class="tab active" onclick="switchControlTab('print')">PRINTING</div>
+//             <div class="tab" onclick="switchControlTab('calib')">CALIBRATION</div>
+//         </div>
+
+//         <div class="print-control-body">
+//             <!-- PRINT TAB CONTENT -->
+//             <div id="tab-print" class="tab-content active">
+//                 <div class="job-status-card">
+//                     <label style="font-size:9px; color:var(--text-dim)">ACTIVE FILE</label>
+//                     <div id="active-filename" style="font-size:12px; margin:5px 0; color:var(--accent-green); font-weight:bold;">${activePrintJob.fileName}</div>
+//                     <div class="progress-bar-container">
+//                         <div id="print-progress-fill" style="height:100%; background:var(--accent-green); width:${activePrintJob.progress}%;"></div>
+//                     </div>
+//                 </div>
+
+//                  <!-- Main Actions -->
+//                 <div class="control-grid">
+//                     <button class="action-btn" onclick="startPrint()" id="ctrl-start">START</button>
+//                     <button class="secondary-btn" onclick="pausePrint()">PAUSE</button>
+//                     <button class="secondary-btn" onclick="document.getElementById('file-input').click()">UPLOAD</button>
+//                     <button class="action-btn" onclick="abortPrint()" style="background:var(--accent-red); color:#fff;">ABORT</button>
+//                 </div>
+                
+//                 <input type="file" id="file-input" style="display:none" onchange="handleFileUpload(event)">
+
+//                 <!-- G-Code Analysis Placeholder (New) -->
+//                 <div class="file-metadata-pane" id="file-meta-display">
+//                     <div class="meta-row"><span>Total lines:</span> <span id="m-lines">---</span></div>
+//                     <div class="meta-row"><span>Parsed moves:</span> <span id="m-moves">---</span></div>
+//                     <div class="meta-row"><span>Skipped lines:</span> <span id="m-skipped">---</span></div>
+//                     <div class="meta-row"><span>Layers:</span> <span id="m-layers">---</span></div>
+//                     <div class="meta-row"><span>Hotend temp:</span> <span id="m-htemp">---</span></div>
+//                     <div class="meta-row"><span>Bed temp:</span> <span id="m-btemp">---</span></div>
+//                     <div class="meta-row"><span>Est. filament:</span> <span id="m-filament">---</span></div>
+//                     <div class="meta-row"><span>Linear advance:</span> <span id="m-kfactor">---</span></div>
+//                 </div>
+//                 <div class="temp-control-section">
+//                 <div class="temp-section-title">Thermal Management</div>
+
+//                 <!-- 1. Presets -->
+//                 <div class="preset-group">
+//                     <div class="temp-input-wrapper">
+//                         <label>Material Presets</label>
+//                         <select class="industrial-select" id="temp-presets">
+//                             <option value="200,60">PLA (200°C / 60°C)</option>
+//                             <option value="240,100">ABS (240°C / 100°C)</option>
+//                             <option value="230,80">PETG (230°C / 80°C)</option>
+//                             <option value="215,60">TPU (215°C / 60°C)</option>
+//                         </select>
+//                     </div>
+//                     <button class="btn-set" onclick="applyPreset()">SET ALL</button>
+//                 </div>
+
+//                 <!-- 2. Manual Controls -->
+//                 <div class="manual-temp-group">
+//                     <div class="temp-input-wrapper">
+//                         <label>Nozzle (°C)</label>
+//                         <input type="number" class="industrial-input" id="manual-nozzle" placeholder="200">
+//                     </div>
+//                     <button class="btn-set" onclick="setTemp('nozzle')">SET</button>
+//                 </div>
+
+//                 <div class="manual-temp-group">
+//                     <div class="temp-input-wrapper">
+//                         <label>Bed (°C)</label>
+//                         <input type="number" class="industrial-input" id="manual-bed" placeholder="60">
+//                     </div>
+//                     <button class="btn-set" onclick="setTemp('bed')">SET</button>
+//                 </div>
+//             </div>
+
+//             <!-- CALIBRATION TAB CONTENT -->
+//             <div id="tab-calib" class="tab-content">
+//                 <div class="calibration-info">
+//                     <p>System health check. Select modules to verify hardware integrity before production.</p>
+//                 </div>
+
+//                 <div class="calibration-options">
+//                     <label class="check-container select-all">
+//                         <input type="checkbox" id="cal-all" onchange="toggleAllCalib(this)">
+//                         <span class="checkmark"></span> SELECT ALL MODULES
+//                     </label>
+//                     <hr style="border:0; border-top:1px solid var(--border); margin:10px 0;">
+//                     <label class="check-container">
+//                         <input type="checkbox" class="cal-opt" value="extrusion">
+//                         <span class="checkmark"></span> Extrusion Test (E-Steps)
+//                     </label>
+//                     <label class="check-container">
+//                         <input type="checkbox" class="cal-opt" value="movement">
+//                         <span class="checkmark"></span> Movement (X/Y/Z Squaring)
+//                     </label>
+//                     <label class="check-container">
+//                         <input type="checkbox" class="cal-opt" value="temp">
+//                         <span class="checkmark"></span> Thermal Stability (PID)
+//                     </label>
+//                 </div>
+
+//                 <div class="calib-footer">
+//                     <div class="est-time">Est. Test Duration: <span id="cal-time">0m</span></div>
+//                     <button class="secondary-btn" style="width:100%; margin: 10px 0;">PREVIEW CALIB G-CODE</button>
+//                     <div class="control-grid" style="margin-top:0">
+//                         <button class="action-btn" onclick="runCalibration()">START TEST</button>
+//                         <button class="action-btn" style="background:var(--accent-red);" onclick="abortPrint()">ABORT</button>
+//                     </div>
+//                 </div>
+//             </div>
+//         </div>
+//         <input type="file" id="file-input" style="display:none" onchange="handleFileUpload(event)">
+//     `;
+// }
 function switchToPrintMode(assetId) {
     const asset = findAsset(assetId);
     if (!asset) return;
@@ -212,15 +336,14 @@ function switchToPrintMode(assetId) {
             <span class="close-x-btn" onclick="exitPrintMode()">×</span>
         </div>
         
-        <!-- Tab Navigation -->
         <div class="control-tabs">
             <div class="tab active" onclick="switchControlTab('print')">PRINTING</div>
             <div class="tab" onclick="switchControlTab('calib')">CALIBRATION</div>
         </div>
 
         <div class="print-control-body">
-            <!-- PRINT TAB CONTENT -->
-            <div id="tab-print" class="tab-content active">
+            <!-- PRINT TAB -->
+            <div id="tab-print" class="tab-content active" style="display: block;">
                 <div class="job-status-card">
                     <label style="font-size:9px; color:var(--text-dim)">ACTIVE FILE</label>
                     <div id="active-filename" style="font-size:12px; margin:5px 0; color:var(--accent-green); font-weight:bold;">${activePrintJob.fileName}</div>
@@ -229,16 +352,13 @@ function switchToPrintMode(assetId) {
                     </div>
                 </div>
 
-                 <!-- Main Actions -->
                 <div class="control-grid">
-                    <button class="action-btn" onclick="startPrint()" id="ctrl-start">START</button>
+                    <button class="action-btn" onclick="startPrint()">START</button>
                     <button class="secondary-btn" onclick="pausePrint()">PAUSE</button>
-                    <button class="secondary-btn" onclick="document.getElementById('file-input').click()">UPLOAD</button>
-                    <button class="action-btn" onclick="abortPrint()" style="background:var(--accent-red); color:#fff;">ABORT</button>
+                    <button class="action-btn" onclick="abortPrint()" style="background:var(--accent-red);">ABORT</button>
                 </div>
                 
-                <input type="file" id="file-input" style="display:none" onchange="handleFileUpload(event)">
-
+                <!-- Metadata & Temp Sections (Keep your existing code here) -->
                 <!-- G-Code Analysis Placeholder (New) -->
                 <div class="file-metadata-pane" id="file-meta-display">
                     <div class="meta-row"><span>Total lines:</span> <span id="m-lines">---</span></div>
@@ -250,12 +370,47 @@ function switchToPrintMode(assetId) {
                     <div class="meta-row"><span>Est. filament:</span> <span id="m-filament">---</span></div>
                     <div class="meta-row"><span>Linear advance:</span> <span id="m-kfactor">---</span></div>
                 </div>
+                <div class="temp-control-section">
+                <div class="temp-section-title">Thermal Management</div>
+
+                <!-- 1. Presets -->
+                <div class="preset-group">
+                    <div class="temp-input-wrapper">
+                        <label>Material Presets</label>
+                        <select class="industrial-select" id="temp-presets">
+                            <option selected="true" disabled="true">--- / --</option>
+                            <option value="200,60">PLA (200°C / 60°C)</option>
+                            <option value="240,100">ABS (240°C / 100°C)</option>
+                            <option value="230,80">PETG (230°C / 80°C)</option>
+                            <option value="215,60">TPU (215°C / 60°C)</option>
+                        </select>
+                    </div>
+                    <button class="btn-set" onclick="applyPreset()">SET ALL</button>
+                </div>
+
+                <!-- 2. Manual Controls -->
+                <div class="manual-temp-group">
+                    <div class="temp-input-wrapper">
+                        <label>Nozzle (°C)</label>
+                        <input type="number" class="industrial-input" id="manual-nozzle" placeholder="200">
+                    </div>
+                    <button class="btn-set" onclick="setTemp('nozzle')">SET</button>
+                </div>
+
+                <div class="manual-temp-group">
+                    <div class="temp-input-wrapper">
+                        <label>Bed (°C)</label>
+                        <input type="number" class="industrial-input" id="manual-bed" placeholder="60">
+                    </div>
+                    <button class="btn-set" onclick="setTemp('bed')">SET</button>
+                </div>
+            </div>
             </div>
 
-            <!-- CALIBRATION TAB CONTENT -->
-            <div id="tab-calib" class="tab-content">
+            <!-- CALIBRATION TAB -->
+            <div id="tab-calib" class="tab-content" style="display: none;">
                 <div class="calibration-info">
-                    <p>System health check. Select modules to verify hardware integrity before production.</p>
+                    <p>System health check. Verify hardware integrity before production.</p>
                 </div>
 
                 <div class="calibration-options">
@@ -278,30 +433,54 @@ function switchToPrintMode(assetId) {
                     </label>
                 </div>
 
-                <div class="calib-footer">
-                    <div class="est-time">Est. Test Duration: <span id="cal-time">0m</span></div>
-                    <button class="secondary-btn" style="width:100%; margin: 10px 0;">PREVIEW CALIB G-CODE</button>
-                    <div class="control-grid" style="margin-top:0">
-                        <button class="action-btn" onclick="runCalibration()">START TEST</button>
-                        <button class="action-btn" style="background:var(--accent-red);" onclick="abortPrint()">ABORT</button>
-                    </div>
+                <div class="calib-footer" style="margin-top:20px;">
+                    <div class="est-time">Est. Duration: <span id="cal-time">0m</span></div>
+                    <button class="action-btn" style="width:100%; margin-top:10px;" onclick="runCalibration()">START TEST</button>
                 </div>
             </div>
         </div>
-        <input type="file" id="file-input" style="display:none" onchange="handleFileUpload(event)">
     `;
 }
-
 // tab logic for printing pane : 
 
 // Logic to switch tabs
-function switchControlTab(tabName) {
-    document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
-    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+// function switchControlTab(tabName) {
+//     document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+//     document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
     
-    document.getElementById(`tab-${tabName}`).classList.add('active');
-    event.currentTarget.classList.add('active');
+//     document.getElementById(`tab-${tabName}`).classList.add('active');
+//     event.currentTarget.classList.add('active');
+// }
+function switchControlTab(tabName) {
+    // 1. Find all contents and remove 'active'
+    const contents = document.querySelectorAll('.tab-content');
+    contents.forEach(content => {
+        content.classList.remove('active');
+        content.style.display = 'none'; // Forced hide
+    });
+
+    // 2. Find all tabs and remove 'active'
+    const tabs = document.querySelectorAll('.tab');
+    tabs.forEach(tab => tab.classList.remove('active'));
+
+    // 3. Activate the specific content
+    const targetContent = document.getElementById(`tab-${tabName}`);
+    if (targetContent) {
+        targetContent.classList.add('active');
+        targetContent.style.display = 'block'; // Forced show
+    }
+
+    // 4. Activate the clicked tab
+    // We look for the tab that matches the name
+    const clickedTab = Array.from(tabs).find(t => t.textContent.toLowerCase().includes(tabName.toLowerCase()));
+    if (clickedTab) {
+        clickedTab.classList.add('active');
+    }
+    
+    console.log(`Switched to ${tabName} mode.`);
 }
+
+
 
 // Shell logic for "Select All"
 function toggleAllCalib(source) {
@@ -707,7 +886,76 @@ document.getElementById('wizard-close').onclick = () => assetWizard.style.displa
 
 
 
-// timeline test code : 
+// // timeline test code : 
+// const horizontalEvents = [
+//     { time: "08:00", desc: "System Warmup", status: "completed" },
+//     { time: "08:15", desc: "Auto-Leveling", status: "completed" },
+//     { time: "08:20", desc: "Print Started", status: "completed" },
+//     { time: "09:45", desc: "Extruder Check", status: "current" },
+//     { time: "---", desc: "Planned Finish", status: "pending" }
+// ];
+
+// function renderHorizontalTimeline() {
+//     const container = document.getElementById('event-timeline-h');
+//     container.innerHTML = horizontalEvents.map(event => `
+//         <div class="event-point-h ${event.status}">
+//             <div class="dot-h"></div>
+//             <div class="time-h">${event.time}</div>
+//             <div class="desc-h">${event.desc}</div>
+//         </div>
+//     `).join('');
+// }
+
+
+// // Function to add a new event to the log
+// function addLogEntry(description, type = "completed") {
+//     const now = new Date();
+//     const timestamp = `${now.getHours()}:${now.getMinutes().toString().padStart(2, '0')}`;
+    
+//     // Set previous "current" events to "completed"
+//     timelineData.forEach(e => { if(e.status === 'current') e.status = 'completed'; });
+    
+//     timelineData.push({ time: timestamp, desc: description, status: type });
+//     renderTimeline();
+// }
+
+// // Initialize on load
+// renderHorizontalTimeline();
+
+// function applyPreset() {
+//     const [nozzle, bed] = document.getElementById('temp-presets').value.split(',');
+//     document.getElementById('manual-nozzle').value = nozzle;
+//     document.getElementById('manual-bed').value = bed;
+    
+//     // Log to Timeline
+//     addLogEntry(`Thermal Preset Applied: ${nozzle}°C / ${bed}°C`);
+    
+//     // Simulate G-Code terminal output
+//     console.log(`M104 S${nozzle}; M140 S${bed};`);
+//     updateTerminal(`Sending: M104 S${nozzle} (Nozzle)`);
+//     updateTerminal(`Sending: M140 S${bed} (Bed)`);
+// }
+
+// function setTemp(type) {
+//     const val = document.getElementById(`manual-${type}`).value;
+//     if(!val) return;
+    
+//     addLogEntry(`Manual ${type} target set to ${val}°C`);
+//     updateTerminal(`Sending: ${type === 'nozzle' ? 'M104' : 'M140'} S${val}`);
+// }
+
+// // Helper to push text to your G-Code terminal
+// function updateTerminal(msg) {
+//     const term = document.getElementById('terminal-output');
+//     if(term) {
+//         term.innerHTML += `\n<span style="color:var(--text-dim)">[SYS]</span> ${msg}`;
+//         term.scrollTop = term.scrollHeight;
+//     }
+// }
+
+/* --- 1. DATA & INITIALIZATION --- */
+
+// Consolidated into one array for the horizontal timeline
 const horizontalEvents = [
     { time: "08:00", desc: "System Warmup", status: "completed" },
     { time: "08:15", desc: "Auto-Leveling", status: "completed" },
@@ -716,8 +964,17 @@ const horizontalEvents = [
     { time: "---", desc: "Planned Finish", status: "pending" }
 ];
 
+// Run on page load
+document.addEventListener('DOMContentLoaded', () => {
+    renderHorizontalTimeline();
+});
+
+/* --- 2. TIMELINE ENGINE --- */
+
 function renderHorizontalTimeline() {
     const container = document.getElementById('event-timeline-h');
+    if (!container) return;
+
     container.innerHTML = horizontalEvents.map(event => `
         <div class="event-point-h ${event.status}">
             <div class="dot-h"></div>
@@ -725,20 +982,153 @@ function renderHorizontalTimeline() {
             <div class="desc-h">${event.desc}</div>
         </div>
     `).join('');
-}
 
+    // Auto-scroll the timeline to the right whenever it updates
+    const wrapper = document.querySelector('.timeline-h');
+    if (wrapper) {
+        wrapper.scrollLeft = wrapper.scrollWidth;
+    }
+}
 
 // Function to add a new event to the log
 function addLogEntry(description, type = "completed") {
     const now = new Date();
-    const timestamp = `${now.getHours()}:${now.getMinutes().toString().padStart(2, '0')}`;
+    const timestamp = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
     
     // Set previous "current" events to "completed"
-    timelineData.forEach(e => { if(e.status === 'current') e.status = 'completed'; });
+    horizontalEvents.forEach(e => { 
+        if(e.status === 'current') e.status = 'completed'; 
+    });
     
-    timelineData.push({ time: timestamp, desc: description, status: type });
-    renderTimeline();
+    // Add the new event to the horizontal array
+    horizontalEvents.push({ 
+        time: timestamp, 
+        desc: description, 
+        status: type 
+    });
+    
+    // Update the UI
+    renderHorizontalTimeline();
 }
 
-// Initialize on load
-renderHorizontalTimeline();
+/* --- 3. THERMAL CONTROLS --- */
+
+function applyPreset() {
+    const presetSelect = document.getElementById('temp-presets');
+    if (!presetSelect) return;
+
+    const [nozzle, bed] = presetSelect.value.split(',');
+    
+    // Update the input fields visually
+    document.getElementById('manual-nozzle').value = nozzle;
+    document.getElementById('manual-bed').value = bed;
+    
+    // Log to Timeline and Terminal
+    addLogEntry(`Thermal Preset Applied: ${nozzle}°C / ${bed}°C`, "current");
+    updateTerminal(`Sending: M104 S${nozzle} (Nozzle)`);
+    updateTerminal(`Sending: M140 S${bed} (Bed)`);
+}
+
+function setTemp(type) {
+    const inputId = `manual-${type}`;
+    const val = document.getElementById(inputId).value;
+    
+    if(!val) return;
+    
+    // Use "current" status so the dot pulses while heating
+    addLogEntry(`Manual ${type} set to ${val}°C`, "current");
+    
+    const gcode = (type === 'nozzle') ? `M104 S${val}` : `M140 S${val}`;
+    updateTerminal(`Sending: ${gcode}`);
+}
+
+/* --- 4. UTILITIES --- */
+
+function updateTerminal(msg) {
+    const term = document.getElementById('terminal-output');
+    if(term) {
+        const timestamp = new Date().toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        term.innerHTML += `\n<span style="color:var(--text-dim)">[${timestamp}] [SYS]</span> ${msg}`;
+        term.scrollTop = term.scrollHeight;
+    }
+}
+
+/// toggle logic : 
+
+
+// function togglePane(side) {
+//     let selector;
+//     let btnId;
+//     let openIcon, closeIcon;
+
+//     switch(side) {
+//         case 'left':
+//             selector = '.left-sidebar';
+//             btnId = 'toggle-left';
+//             openIcon = '◀'; closeIcon = '▶';
+//             break;
+//         case 'right':
+//             selector = '.right-rail';
+//             btnId = 'toggle-right';
+//             openIcon = '▶'; closeIcon = '◀';
+//             break;
+//         case 'bottom':
+//             selector = '.timeline-wrapper';
+//             btnId = 'toggle-bottom';
+//             openIcon = '▼'; closeIcon = '▲';
+//             break;
+//     }
+
+//     const pane = document.querySelector(selector);
+//     const btn = document.getElementById(btnId);
+    
+//     pane.classList.toggle('collapsed');
+    
+//     // Switch arrow icons
+//     if (btn) {
+//         btn.innerText = pane.classList.contains('collapsed') ? closeIcon : openIcon;
+//     }
+// }
+
+function togglePane(side) {
+    const paneMap = {
+        'left': { selector: '.left-sidebar', btn: 'toggle-left', icons: ['◀', '▶'] },
+        'right': { selector: '.right-rail', btn: 'toggle-right', icons: ['▶', '◀'] },
+        'bottom': { selector: '.timeline-wrapper', btn: 'toggle-bottom', icons: ['▼', '▲'] }
+    };
+
+    const config = paneMap[side];
+    const pane = document.querySelector(config.selector);
+    const btn = document.getElementById(config.btn);
+    
+    pane.classList.toggle('collapsed');
+
+    // Update icons
+    if (pane.classList.contains('collapsed')) {
+        btn.innerText = config.icons[1];
+    } else {
+        btn.innerText = config.icons[0];
+    }
+
+    // Adjust timeline width if sidebars change
+    updateTimelineLayout();
+}
+
+function updateTimelineLayout() {
+    const timeline = document.querySelector('.timeline-wrapper');
+    const floatingPane = document.querySelector('.floating-pane');
+    const leftActive = !document.querySelector('.left-sidebar').classList.contains('collapsed');
+    const rightActive = !document.querySelector('.right-rail').classList.contains('collapsed');
+
+    timeline.style.marginLeft = leftActive ? "280px" : "0px";
+    // timeline.style.marginRight = rightActive ? "340px" : "0px";
+
+
+    if(rightActive) {
+        timeline.style.marginRight = "340px";
+        floatingPane.style.marginLeft = "340px";
+    } else {
+        timeline.style.marginRight = "0px";
+        floatingPane.style.marginLeft = "0px";
+    }
+}

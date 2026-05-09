@@ -24,7 +24,7 @@ export class PrinterFarmManager {
     // Focus State
     this.focusTargetId = null;
     this.isTransitioning = false;
-    this.lerpFactor = 0.15; // Faster camera transition
+    this.lerpFactor = 0.35; // Snappy camera transition
     
     // Callbacks for UI sync
     this._onSelectCallbacks = [];
@@ -111,6 +111,33 @@ export class PrinterFarmManager {
   }
 
   /**
+   * Removes a printer from the scene and internal tracking.
+   * @param {number|string} id 
+   */
+  removePrinter(id) {
+    const printerIdx = this.printers.findIndex(p => p.id === id);
+    if (printerIdx === -1) return;
+
+    const printer = this.printers[printerIdx];
+    const bayIdx = this.bays.findIndex(b => b.id === id);
+
+    // 1. Physical Removal
+    if (printer.model.parent) printer.model.parent.remove(printer.model);
+    if (bayIdx !== -1) {
+      this.bays[bayIdx].destroy();
+      this.bays.splice(bayIdx, 1);
+    }
+
+    // 2. State Cleanup
+    this.occupiedPositions.delete(`${printer.worldOffset.x},${printer.worldOffset.z}`);
+    this.printers.splice(printerIdx, 1);
+    
+    // Update Context
+    AppContext.printers = this.printers;
+    console.log(`[Farm] 🗑 Removed printer instance: ${id}`);
+  }
+
+  /**
    * Smoothly moves the camera to focus on a specific printer.
    */
   focusOn(id) {
@@ -144,12 +171,8 @@ export class PrinterFarmManager {
     // Visualise potential spots
     this._createGhostGrid();
 
-    // Show Overlay
-    const overlay = document.getElementById('placement-overlay');
-    if (overlay) {
-      overlay.style.display = 'flex';
-      overlay.querySelector('.v-name').textContent = variant.name;
-    }
+    // Visualise potential spots
+    this._createGhostGrid();
   }
 
   exitPlacementMode() {
@@ -157,9 +180,6 @@ export class PrinterFarmManager {
     this.pendingVariant = null;
     this.ghostBays.forEach(g => this.scene.remove(g));
     this.ghostBays = [];
-
-    const overlay = document.getElementById('placement-overlay');
-    if (overlay) overlay.style.display = 'none';
   }
 
   _createGhostGrid() {
@@ -258,8 +278,11 @@ export class PrinterFarmManager {
 
     this.controls.target.lerp(targetPos, this.lerpFactor);
     this.camera.position.lerp(idealCamPos, this.lerpFactor);
+    this.camera.lookAt(this.controls.target);
 
     if (this.camera.position.distanceTo(idealCamPos) < 0.01) {
+      this.camera.position.copy(idealCamPos);
+      this.controls.target.copy(targetPos);
       this.isTransitioning = false;
     }
   }
@@ -269,7 +292,15 @@ export class PrinterFarmManager {
    */
   select(id) {
     this.bays.forEach(bay => bay.setSelection(bay.id === id));
-    if (id !== null) this.focusOn(id);
+    
+    if (id !== null) {
+      this.focusOn(id);
+    } else {
+      // If null is passed, we return to overview
+      this.isTransitioning = true;
+      this.mode = 'overview';
+      this.focusTargetId = -1;
+    }
 
     // Trigger UI callbacks
     this._onSelectCallbacks.forEach(cb => cb(id));

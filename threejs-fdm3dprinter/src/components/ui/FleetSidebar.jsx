@@ -2,129 +2,357 @@ import React, { useState } from 'react';
 import { useFleetStore } from '../../store/useFleetStore.js';
 
 export function FleetSidebar() {
-  const { fleetGroups, toggleGroup, uiModals, toggleModal } = useFleetStore();
+  const { 
+    paneStates, 
+    togglePane, 
+    fleetGroups, 
+    printers,
+    activePrinterId,
+    toggleGroup, 
+    uiModals, 
+    toggleModal,
+    activeControlAssetId,
+    setControlAsset,
+    addLogEntry,
+    addGroup,
+    deleteGroup,
+    setTargetWizardGroupId,
+    moveAsset,
+    updateActiveJob,
+    setSelectedAssetForReconfig,
+    deleteAsset,
+    setActivePrinter
+  } = useFleetStore();
+  
   const [searchTerm, setSearchTerm] = useState('');
+  const [controlTab, setControlTab] = useState('print');
+  const [openContextMenuId, setOpenContextMenuId] = useState(null);
+
+  const filteredGroups = fleetGroups.map(group => ({
+    ...group,
+    assets: group.assets.filter(asset => 
+      asset.name.toLowerCase().includes(searchTerm.toLowerCase())
+    )
+  })).filter(group => group.assets.length > 0 || group.groupName.toLowerCase().includes(searchTerm.toLowerCase()));
+
+  // Find active control asset
+  let activeAsset = null;
+  if (activeControlAssetId !== null) {
+    for (const g of fleetGroups) {
+      const asset = g.assets.find(a => a.id === activeControlAssetId);
+      if (asset) {
+        activeAsset = asset;
+        break;
+      }
+    }
+  }
+
+  const handleAssetDoubleClick = (id) => {
+    setControlAsset(id);
+    setActivePrinter(id);
+    addLogEntry(`Accessing Control Interface for node [${id}]`, "SYS");
+  };
+
+  const handleAddGroup = () => {
+    const name = prompt("Enter New Group Name:");
+    if (name) {
+      addGroup(name);
+      addLogEntry(`Created new group [${name}]`, "SYS");
+      toggleModal('globalAddMenu', false);
+    }
+  };
+
+  const handleQuickAdd = (e, groupId) => {
+    e.stopPropagation();
+    setTargetWizardGroupId(groupId);
+    toggleModal('assetWizard', true);
+  };
+
+  const toggleContextMenu = (e, id) => {
+    e.stopPropagation();
+    setOpenContextMenuId(openContextMenuId === id ? null : id);
+  };
+
+  // Derive activeJob from the currently focused printer
+  const currentPrinter = activePrinterId !== null ? printers[activePrinterId] : null;
+  
+  const activeJob = {
+    fileName: currentPrinter?.fileName || "No file selected",
+    progress: currentPrinter?.progress || 0,
+    isPrinting: !!currentPrinter?.isPrinting,
+    isPaused: !!currentPrinter?.isPaused,
+    lines: currentPrinter?.lines || "---",
+    moves: currentPrinter?.moves || "---",
+    skipped: currentPrinter?.skipped || "---",
+    layers: currentPrinter?.layers || "---",
+    htemp: currentPrinter?.htemp || "---",
+    btemp: currentPrinter?.btemp || "---",
+    filament: currentPrinter?.filament || "---",
+    kfactor: currentPrinter?.kfactor || "---"
+  };
+
+  const handleStartPrint = () => {
+    const { updateActiveJob, setPrintCommand, addLogEntry } = useFleetStore.getState();
+    if (activeJob.fileName === "No file selected") {
+      addLogEntry("ERROR: Cannot start - no file loaded.", "SYS");
+      return;
+    }
+    
+    setPrintCommand('start');
+    updateActiveJob({ isPrinting: true, isPaused: false });
+    addLogEntry(`COMMAND: START_PRINT for ${activeJob.fileName} initiated.`, "SYS");
+  };
+
+  const handlePausePrint = () => {
+    const { updateActiveJob, setPrintCommand, addLogEntry } = useFleetStore.getState();
+    if (!activeJob.isPrinting) return;
+
+    const newPausedState = !activeJob.isPaused;
+    const action = newPausedState ? 'pause' : 'resume';
+    
+    setPrintCommand(action);
+    updateActiveJob({ isPaused: newPausedState });
+    addLogEntry(`COMMAND: ${action.toUpperCase()}_PRINT requested.`, "SYS");
+  };
+
+  const handleAbortPrint = () => {
+    const { updateActiveJob, setPrintCommand, addLogEntry } = useFleetStore.getState();
+    setPrintCommand('abort');
+    updateActiveJob({ isPrinting: false, isPaused: false, progress: 0 });
+    addLogEntry("COMMAND: ABORT_PRINT - cutting power.", "SYS");
+  };
+
+  const handleApplyPreset = (e) => {
+    const select = e.target.previousSibling.querySelector('select');
+    const [nozzle, bed] = select.value.split(',');
+    addLogEntry(`Thermal Preset Applied: ${nozzle}°C / ${bed}°C`, "current");
+    updateActiveJob({ htemp: nozzle + " °C", btemp: bed + " °C" });
+  };
 
   return (
-    <aside className="left-sidebar">
+    <aside className={`left-sidebar ${!paneStates.left ? 'collapsed' : ''}`} onClick={() => setOpenContextMenuId(null)}>
+      <button className="pane-toggle-btn" id="toggle-left" onClick={() => togglePane('left')}>
+        {paneStates.left ? '◀' : '▶'}
+      </button>
+      
       <nav className="icon-rail">
         <div className="nav-icon active">⬢</div>
+        <div className="nav-icon" id="rail-printer-icon">⎙</div>
         <div className="nav-icon">⚀</div>
         <div className="nav-icon">⚙</div>
       </nav>
-      
-      <section className="pane fleet-manager">
-        <div className="pane-header relative">
-          FLEET NAVIGATION 
-          <span 
-            className="add-btn" 
-            title="Add Group or Asset"
-            onClick={() => toggleModal('globalAddMenu')}
-          >+</span>
-          
-          {uiModals.globalAddMenu && (
-            <ul className="status-dropdown" style={{ display: 'block', position: 'absolute', top: '100%', right: '0', zIndex: 1001 }}>
-              <li onClick={() => {
-                toggleModal('globalAddMenu', false);
-                toggleModal('assetWizard', true);
-              }}>+ New Asset</li>
-              <li onClick={() => toggleModal('globalAddMenu', false)}>+ New Group</li>
-            </ul>
-          )}
-        </div>
-        
-        <div className="search-box mb-3">
-          <input 
-            type="text" 
-            placeholder="Search nodes..." 
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full bg-black border border-[var(--border)] text-white px-3 py-1.5 text-xs rounded"
-          />
-        </div>
-        
-        <div className="tree-container overflow-y-auto pr-1 pb-4">
-          {fleetGroups.map((group) => (
-            <div key={group.id} className="group-wrapper mb-1">
-              <div 
-                className={`group-node ${group.isOpen ? 'open' : ''}`}
-                onClick={() => toggleGroup(group.id)}
-              >
-                <span className="uppercase">{group.groupName}</span>
-                <div className="flex items-center">
-                  <span 
-                    className="add-btn-quick px-1" 
-                    title="Quick Add Asset"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      toggleModal('assetWizard', true);
-                    }}
-                  >+</span>
-                  {group.canDelete && (
-                    <span className="action-icon text-[var(--accent-red)] ml-2">🗑</span>
-                  )}
+
+      {activeControlAssetId === null ? (
+        <section className="pane fleet-manager">
+          <div className="pane-header" style={{ position: 'relative' }}>
+            FLEET NAVIGATION 
+            <span 
+              className="add-btn" 
+              id="global-add-fleet"
+              title="Add Group or Asset"
+              onClick={(e) => {
+                e.stopPropagation();
+                toggleModal('globalAddMenu');
+              }}
+            >+</span>
+            
+            {uiModals.globalAddMenu && (
+              <ul className="status-dropdown" id="global-add-menu" style={{ display: 'block', position: 'absolute', top: '35px', right: 0, width: '140px', zIndex: 100 }}>
+                <li onClick={() => {
+                  setTargetWizardGroupId("unassigned");
+                  toggleModal('globalAddMenu', false);
+                  toggleModal('assetWizard', true);
+                }}>+ New Asset</li>
+                <li onClick={handleAddGroup}>+ New Group</li>
+              </ul>
+            )}
+          </div>
+
+          <div className="search-box">
+            <input 
+              type="text" 
+              placeholder=" Search nodes..." 
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+          </div>
+
+          <div className="tree-container" id="fleet-tree">
+            {filteredGroups.map((group) => (
+              <div key={group.id} className="group-wrapper">
+                <div 
+                  className={`group-node ${group.isOpen ? 'open' : ''}`}
+                  onClick={() => toggleGroup(group.id)}
+                >
+                  <span>{group.groupName.toUpperCase()}</span>
+                  <div style={{ display: 'flex', alignItems: 'center' }}>
+                    <span className="add-btn-quick" title="Quick Add Asset" onClick={(e) => handleQuickAdd(e, group.id)}>+</span>
+                    {group.canDelete && <span className="action-icon" style={{ marginLeft: '10px', color: 'var(--accent-red)' }} onClick={(e) => { e.stopPropagation(); deleteGroup(group.id); }}>🗑</span>}
+                  </div>
                 </div>
-              </div>
-              
-              {group.isOpen && (
-                <ul className="asset-list block">
-                  {group.assets.length === 0 ? (
-                    <li className="tree-node empty-msg opacity-50 italic pl-5">Empty Group</li>
-                  ) : (
-                    group.assets
-                      .filter(asset => asset.name.toLowerCase().includes(searchTerm.toLowerCase()))
-                      .map((asset) => (
-                        <li key={asset.id} className="tree-node cursor-pointer group">
-                          <span className="asset-label flex-1 truncate text-[#ccc]">
-                            <span className="status-dot active text-[var(--accent-green)] mr-2">●</span>
+                
+                {group.isOpen && (
+                  <ul className="asset-list">
+                    {group.assets.length === 0 ? (
+                      <li className="tree-node empty-msg" style={{ opacity: 0.5, fontStyle: 'italic', paddingLeft: '20px' }}>Empty Group</li>
+                    ) : (
+                      group.assets.map((asset) => (
+                        <li 
+                          key={asset.id} 
+                          className="tree-node"
+                          onDoubleClick={() => handleAssetDoubleClick(asset.id)}
+                        >
+                          <span className="asset-label">
+                            <span className="status-dot green">●</span>
                             {asset.name}
                           </span>
-                          <div className="asset-actions flex items-center opacity-0 group-hover:opacity-100 transition-opacity">
-                            <span className="three-dots">⋮</span>
+                          <div className="asset-actions" style={{ visibility: 'visible', opacity: 1 }}>
+                            <span className="three-dots" onClick={(e) => toggleContextMenu(e, asset.id)}>⋮</span>
+                            {openContextMenuId === asset.id && (
+                              <ul className="asset-context-menu" style={{ display: 'block' }}>
+                                <li onClick={() => { useFleetStore.getState().setActivePrinter(asset.id); setOpenContextMenuId(null); }}>🔍 Focus 3D View</li>
+                                <li onClick={() => handleAssetDoubleClick(asset.id)}>▶ Start Control</li>
+                                <li onClick={() => { setSelectedAssetForReconfig(asset); setTargetWizardGroupId(group.id); toggleModal('assetWizard', true); }}>⚙ Reconfigure</li>
+                                <li onClick={() => { moveAsset(asset.id, "unassigned"); setOpenContextMenuId(null); }}>📤 Move to Unassigned</li>
+                                <li style={{ color: 'var(--accent-red)' }} onClick={() => deleteAsset(group.id, asset.id)}>✕ Delete Asset</li>
+                              </ul>
+                            )}
                           </div>
                         </li>
                       ))
-                  )}
-                </ul>
-              )}
-            </div>
-          ))}
-        </div>
-      </section>
+                    )}
+                  </ul>
+                )}
+              </div>
+            ))}
+          </div>
+        </section>
 
-      {uiModals.assetWizard && (
-        <div className="floating-pane config-modal" style={{ display: 'block', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', width: '320px' }}>
+      ) : (
+        <section className="pane fleet-manager">
           <div className="pane-header">
-            NEW ASSET CONFIGURATION
-            <span className="close-x-btn" onClick={() => toggleModal('assetWizard', false)}>×</span>
+            <span>CONTROL: {activeAsset?.name}</span>
+            <span className="close-x-btn" onClick={() => setControlAsset(null)}>×</span>
+          </div>
+          
+          <div className="control-tabs">
+            <div 
+              className={`tab ${controlTab === 'print' ? 'active' : ''}`} 
+              onClick={() => setControlTab('print')}
+            >PRINTING</div>
+            <div 
+              className={`tab ${controlTab === 'calib' ? 'active' : ''}`} 
+              onClick={() => setControlTab('calib')}
+            >CALIBRATION</div>
           </div>
 
-          <nav className="wizard-tabs">
-            <div className="tab-btn active w-1/2 border-b-2 border-[var(--accent-green)] text-[var(--accent-green)] pb-2 text-center uppercase text-[10px] cursor-pointer">Printer</div>
-            <div className="tab-btn w-1/2 border-b-2 border-transparent pb-2 text-center uppercase text-[10px] cursor-pointer">Filament</div>
-          </nav>
+          <div className="print-control-body">
+            {controlTab === 'print' ? (
+              <div id="tab-print" className="tab-content active" style={{ display: 'block' }}>
+                <div className="job-status-card">
+                  <label style={{ fontSize: '9px', color: 'var(--text-dim)' }}>ACTIVE FILE</label>
+                  <div id="active-filename" style={{ fontSize: '12px', margin: '5px 0', color: 'var(--accent-green)', fontWeight: 'bold' }}>{activeJob.fileName}</div>
+                  <div className="progress-bar-container">
+                    <div id="print-progress-fill" className="progress-fill" style={{ width: `${activeJob.progress}%` }}></div>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px' }}>
+                    <span>{activeJob.progress}%</span>
+                    <span>Est: --:--</span>
+                  </div>
+                </div>
 
-          <div className="wizard-content mt-4">
-            <div className="tab-pane active block">
-              <div className="config-body scrollable">
-                <label className="block text-[10px] text-[var(--text-dim)] mt-2">Printer ID</label>
-                <input type="text" placeholder="PRINTER_01" className="w-full bg-black border border-[var(--border)] text-white p-1 mb-2" /> 
+                <div className="control-grid">
+                  <button className="action-btn btn-start" onClick={handleStartPrint}>START</button>
+                  <button className="secondary-btn" onClick={handlePausePrint}>
+                    {activeJob.isPaused ? "CONTINUE" : "PAUSE"}
+                  </button>
+                  <button className="secondary-btn" onClick={() => document.getElementById('global-file-input').click()}>UPLOAD</button>
+                  <button className="action-btn btn-abort" onClick={handleAbortPrint}>ABORT</button>
+                </div>
                 
-                <label className="block text-[10px] text-[var(--text-dim)] mt-2">Model</label>
-                <input type="text" placeholder="BCN3D+ Custom" className="w-full bg-black border border-[var(--border)] text-white p-1 mb-2" />
-                
-                <div className="input-row flex gap-2">
-                  <div className="flex-1"><label className="block text-[10px] text-[var(--text-dim)]">Build X</label><input type="number" defaultValue="200" className="w-full bg-black border border-[var(--border)] text-white p-1" /></div>
-                  <div className="flex-1"><label className="block text-[10px] text-[var(--text-dim)]">Build Y</label><input type="number" defaultValue="200" className="w-full bg-black border border-[var(--border)] text-white p-1" /></div>
-                  <div className="flex-1"><label className="block text-[10px] text-[var(--text-dim)]">Build Z</label><input type="number" defaultValue="200" className="w-full bg-black border border-[var(--border)] text-white p-1" /></div>
+                <div className="file-metadata-pane">
+                  <div className="meta-row"><span>Total lines:</span> <span>{activeJob.lines}</span></div>
+                  <div className="meta-row"><span>Parsed moves:</span> <span>{activeJob.moves}</span></div>
+                  <div className="meta-row"><span>Skipped lines:</span> <span>{activeJob.skipped}</span></div>
+                  <div className="meta-row"><span>Layers:</span> <span>{activeJob.layers}</span></div>
+                  <div className="meta-row"><span>Hotend temp:</span> <span>{activeJob.htemp}</span></div>
+                  <div className="meta-row"><span>Bed temp:</span> <span>{activeJob.btemp}</span></div>
+                  <div className="meta-row"><span>Est. filament:</span> <span>{activeJob.filament}</span></div>
+                  <div className="meta-row"><span>Linear advance:</span> <span>{activeJob.kfactor}</span></div>
+                </div>
+
+                <div className="temp-control-section">
+                  <div className="temp-section-title">Thermal Management</div>
+                  <div className="preset-group">
+                    <div className="temp-input-wrapper">
+                      <label>Material Presets</label>
+                      <select className="industrial-select">
+                        <option value="200,60">PLA (200°C / 60°C)</option>
+                        <option value="240,100">ABS (240°C / 100°C)</option>
+                        <option value="230,80">PETG (230°C / 80°C)</option>
+                        <option value="215,60">TPU (215°C / 60°C)</option>
+                      </select>
+                    </div>
+                    <button className="btn-set" onClick={handleApplyPreset}>SET ALL</button>
+                  </div>
+                  
+                  <div className="manual-temp-group" style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
+                    <div className="temp-input-wrapper">
+                      <label>Nozzle (°C)</label>
+                      <input type="number" className="industrial-input" placeholder="200" style={{ width: '100%' }} />
+                    </div>
+                    <button className="btn-set" style={{ height: '32px', alignSelf: 'flex-end' }} onClick={(e) => {
+                      const val = e.target.previousSibling.querySelector('input').value;
+                      if(val) { addLogEntry(`Manual nozzle set to ${val}°C`, "current"); updateActiveJob({ htemp: val + " °C" }); }
+                    }}>SET</button>
+                  </div>
+                  <div className="manual-temp-group" style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
+                    <div className="temp-input-wrapper">
+                      <label>Bed (°C)</label>
+                      <input type="number" className="industrial-input" placeholder="60" style={{ width: '100%' }} />
+                    </div>
+                    <button className="btn-set" style={{ height: '32px', alignSelf: 'flex-end' }} onClick={(e) => {
+                      const val = e.target.previousSibling.querySelector('input').value;
+                      if(val) { addLogEntry(`Manual bed set to ${val}°C`, "current"); updateActiveJob({ btemp: val + " °C" }); }
+                    }}>SET</button>
+                  </div>
                 </div>
               </div>
-              <div className="modal-footer flex gap-2 mt-4">
-                <button className="action-btn flex-1 bg-[var(--accent-green)] text-black font-bold p-2 text-xs uppercase" onClick={() => toggleModal('assetWizard', false)}>Add Asset</button>
+            ) : (
+              <div id="tab-calib" className="tab-content active" style={{ display: 'block' }}>
+                <div className="calibration-info">
+                  <p>System health check. Verify hardware integrity before production.</p>
+                </div>
+                <div className="calibration-options">
+                  <label className="check-container select-all">
+                    <input type="checkbox" onChange={(e) => {
+                      document.querySelectorAll('.cal-opt').forEach(cb => cb.checked = e.target.checked);
+                      document.getElementById('cal-time-val').innerText = e.target.checked ? "12m 30s" : "0m";
+                    }} />
+                    <span className="checkmark"></span> SELECT ALL MODULES
+                  </label>
+                  <hr style={{ border: 0, borderTop: '1px solid var(--border)', margin: '10px 0' }} />
+                  <label className="check-container">
+                    <input type="checkbox" className="cal-opt" />
+                    <span className="checkmark"></span> Extrusion Test (E-Steps)
+                  </label>
+                  <label className="check-container">
+                    <input type="checkbox" className="cal-opt" />
+                    <span className="checkmark"></span> Movement (X/Y/Z Squaring)
+                  </label>
+                  <label className="check-container">
+                    <input type="checkbox" className="cal-opt" />
+                    <span className="checkmark"></span> Thermal Stability (PID)
+                  </label>
+                </div>
+                <div className="calib-footer" style={{ marginTop: '20px' }}>
+                  <div className="est-time">Est. Duration: <span id="cal-time-val">0m</span></div>
+                  <button className="action-btn" style={{ width: '100%', marginTop: '10px' }} onClick={() => addLogEntry("SYSTEM: Initiating hardware calibration sequence...", "SYS")}>START TEST</button>
+                </div>
               </div>
-            </div>
+            )}
           </div>
-        </div>
+        </section>
       )}
     </aside>
   );
