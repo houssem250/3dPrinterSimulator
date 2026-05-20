@@ -1,8 +1,20 @@
 import React from 'react';
 import { useFleetStore } from '../../store/useFleetStore.js';
+import { ThermalChart } from './ThermalChart.jsx';
 
 export function HealthRail() {
-  const { paneStates, togglePane, systemAlerts, toggleAlert, setAlertFixing, resolveAlert, addLogEntry, addTimelineEvent } = useFleetStore();
+  const { 
+    paneStates, 
+    togglePane, 
+    systemAlerts, 
+    toggleAlert, 
+    setAlertFixing, 
+    resolveAlert, 
+    addLogEntry, 
+    addTimelineEvent,
+    activePrinterId,
+    printers
+  } = useFleetStore();
 
   const handleFixNow = (e, id) => {
     e.stopPropagation();
@@ -80,7 +92,9 @@ export function HealthRail() {
 
       <section className="sub-pane">
         <h6>Nozzle/Bed/heatsink Thermal Health</h6>
-        <canvas id="thermal-chart"></canvas>
+        <div style={{ height: '140px' }}>
+          <ThermalChart history={printers[activePrinterId]?.tempHistory || []} />
+        </div>
       </section>
 
       <section className="sub-pane fleet-overview">

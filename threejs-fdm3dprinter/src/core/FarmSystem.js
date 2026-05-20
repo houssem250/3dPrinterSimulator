@@ -97,13 +97,10 @@ export class FarmSystem {
   }
 
   _registerTelemetry(printer) {
-    printer.state.onUpdate((telemetry) => {
-      // Map telemetry to UI-friendly store fields
+    printer.state.subscribe((telemetry) => {
       const updates = { ...telemetry };
+      delete updates.layers;
       
-      if (telemetry.layer !== undefined) {
-        updates.layers = `${telemetry.layer} / ---`;
-      }
       if (telemetry.temp?.nozzle !== undefined) {
         updates.htemp = `${Math.round(telemetry.temp.nozzle)} °C`;
       }
@@ -135,7 +132,7 @@ export class FarmSystem {
 
         console.log(`[Farm] 🕹 Executing ${action} on printer ${activeId}`);
         
-        if (action === 'start') printer.standalone.start();
+        if (action === 'start') printer.standalone.print();
         else if (action === 'pause') printer.standalone.pause();
         else if (action === 'resume') printer.standalone.resume();
         else if (action === 'abort') printer.standalone.stop();

@@ -51,8 +51,8 @@ export class StreamProvider extends BaseProvider {
         // AUGMENT raw telemetry with high-level G-code context
         data = {
           ...data,
-          // Overwrite with metadata that MQTT lacks
-          layer: canonical.layer,
+          // Prioritize hardware-estimated layer over simulation file
+          layer: raw.layer || canonical.layer,
           // Use canonical extrusion status if raw is uncertain
           is_extruding: raw.is_extruding ?? canonical.is_extruding,
           // Marker for UI/Debugging
@@ -96,16 +96,20 @@ export class StreamProvider extends BaseProvider {
   }
 
   _processBuffer() {
+    const now = Date.now();
+    const targetTime = now - this.bufferDelayMs;
+
     if (this.queue.length < 2) {
       // Not enough data to interpolate, just emit last if available
-      if (this.queue.length === 1 && !this._lastEmittedFrame) {
-         this.emit(this.queue[0].data);
+      if (this.queue.length === 1) {
+         const f = this.queue[0];
+         if (f.arrivalTime <= targetTime && this._lastEmittedFrame !== f.data) {
+            this.emit(f.data);
+            this._lastEmittedFrame = f.data;
+         }
       }
       return;
     }
-
-    const now = Date.now();
-    const targetTime = now - this.bufferDelayMs;
 
     // Find the pair of frames that bracket targetTime
     let i = 0;
@@ -159,9 +163,15 @@ export class StreamProvider extends BaseProvider {
       temp: {
         nozzle: lerp(d1.temp?.nozzle || 0, d2.temp?.nozzle || 0, alpha),
         bed: lerp(d1.temp?.bed || 0, d2.temp?.bed || 0, alpha),
+        nozzleTarget: alpha < 0.5 ? (d1.temp?.nozzleTarget || 0) : (d2.temp?.nozzleTarget || 0),
+        bedTarget: alpha < 0.5 ? (d1.temp?.bedTarget || 0) : (d2.temp?.bedTarget || 0),
       },
       feedrate: lerp(d1.feedrate || 0, d2.feedrate || 0, alpha),
       layer: alpha < 0.5 ? (d1.layer || 0) : (d2.layer || 0),
+      layers: alpha < 0.5 ? (d1.layers || 0) : (d2.layers || 0),
+      progress: alpha < 0.5 ? (d1.progress || 0) : (d2.progress || 0),
+      timeElapsed: alpha < 0.5 ? (d1.timeElapsed || 0) : (d2.timeElapsed || 0),
+      timeLeft: alpha < 0.5 ? (d1.timeLeft || 0) : (d2.timeLeft || 0),
       status: d2.status // Snap to latest status
     };
   }

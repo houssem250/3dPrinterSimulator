@@ -27,6 +27,7 @@ export class PrinterInstance {
     this.model = model;
     this.worldOffset = worldOffset;
     this.scene = scene;
+    this.mqttService = mqttService;
 
     // Apply offset
     this.model.position.copy(worldOffset);
@@ -81,24 +82,40 @@ export class PrinterInstance {
    * @param {'standalone'|'stream'} mode
    * @param {object} [mqttService] Optional singleton service if we share a client
    */
-  async switchMode(mode, mqttService = null) {
+  async switchMode(mode, options = {}) {
     console.log(`[Printer ${this.id}] 🔄 Switching to ${mode} mode...`);
     this.currentProvider.stop();
     this.filament.clear();
 
-    if (mode === 'standalone') {
-      this.currentProvider = this.standalone;
+    if (mode === 'standalone' || mode === 'disconnected') {
+      const entry = this.mqttService?.instances.get(this.id);
+      const oldBrokerUrl = entry?.brokerUrl;
+      
+      this.currentProvider = this.standalone; // Fallback provider
+
+      // Physically close connection if no one else is using it
+      if (this.mqttService && oldBrokerUrl) {
+        this.mqttService.disconnect(oldBrokerUrl);
+      }
     } else {
       this.currentProvider = this.stream;
-      if (mqttService && PRINTER_CONFIG.MQTT.ENABLED) {
-        await mqttService.connect();
+      if (this.mqttService && PRINTER_CONFIG.MQTT.ENABLED) {
+        const brokerUrl = options.url || PRINTER_CONFIG.MQTT.BROKER_URL;
+        
+        // Update registration with the new URL context
+        const entry = this.mqttService.instances.get(this.id);
+        if (entry) entry.brokerUrl = brokerUrl;
+
+        await this.mqttService.connect(brokerUrl);
       }
     }
 
     this.state.providerMode = mode;
     this.state.reset(); // Clear old state and push new mode to UI
 
-    await this.currentProvider.start();
+    if (mode !== 'disconnected') {
+      await this.currentProvider.start();
+    }
   }
 
   /**

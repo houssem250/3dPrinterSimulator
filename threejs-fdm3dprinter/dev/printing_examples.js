@@ -188,7 +188,7 @@ G28
       console.error('No moves loaded. Use fromURL() or fromString() first.');
       return;
     }
-    this._standalone.start();
+    this._standalone.print();
   }
 
   /** Pauses the current print. */
@@ -203,8 +203,7 @@ G28
 
   /** Switches the target printer to Stream (MQTT) Mode */
   async stream() {
-    const { mqttService } = await import('../src/services/MqttService.js');
-    await this._instance.switchMode('stream', mqttService);
+    await this._instance.switchMode('stream');
     console.log(`📡 Printer #${this._targetId} is now LISTENING for Live Stream Telemetry.`);
   }
 

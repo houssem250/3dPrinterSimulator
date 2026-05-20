@@ -42,6 +42,13 @@ export const useFleetStore = create(subscribeWithSelector((set) => ({
     right: true,
     bottom: true
   },
+  
+  // OctoPrint Connection
+  octoConfig: { ip: 'localhost', apiKey: '' },
+  connectionState: { status: 'idle', message: 'Awaiting parameters...' },
+  setConnectionState: (status, message) => set({ 
+    connectionState: { status, message } 
+  }),
 
   // Placement Mode State
   placementMode: {
@@ -236,16 +243,49 @@ export const useFleetStore = create(subscribeWithSelector((set) => ({
   /**
    * Updates a specific printer's telemetry.
    */
-  updatePrinter: (id, telemetry) => set((state) => ({
-    printers: {
-      ...state.printers,
-      [id]: { 
-        ...(state.printers[id] || {}), 
-        ...telemetry,
-        id 
+  updatePrinter: (id, telemetry) => set((state) => {
+    const existing = state.printers[id] || {};
+    const newHistory = [...(existing.tempHistory || [])];
+    
+    // Add new point if it has thermal data
+    if (telemetry.temp) {
+      const now = Date.now();
+      const nozzle = telemetry.temp.nozzle ?? 0;
+      const bed = telemetry.temp.bed ?? 0;
+      const nozzleTarget = telemetry.temp.nozzleTarget ?? 0;
+      const bedTarget = telemetry.temp.bedTarget ?? 0;
+      
+      // Add fake heatsink (30-45C depending on nozzle temp)
+      const heatsink = 30 + (nozzle * 0.05) + (Math.random() * 0.5);
+      
+      newHistory.push({
+        time: now,
+        nozzle,
+        nozzleTarget,
+        bed,
+        bedTarget,
+        heatsink
+      });
+      
+      // Sliding window: 10 minutes (600,000ms)
+      const windowMs = 600000;
+      while (newHistory.length > 0 && now - newHistory[0].time > windowMs) {
+        newHistory.shift();
       }
     }
-  })),
+
+    return {
+      printers: {
+        ...state.printers,
+        [id]: { 
+          ...existing, 
+          ...telemetry,
+          tempHistory: newHistory,
+          id 
+        }
+      }
+    };
+  }),
 
   /**
    * Selects the active printer to display in the focus detail view.

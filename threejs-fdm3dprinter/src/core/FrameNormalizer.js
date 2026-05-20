@@ -58,20 +58,28 @@ export class FrameNormalizer {
     // 3. Temperatures
     const rawTemp = raw.temp || raw.temperature || {};
     frame.temp = {
-      nozzle: rawTemp.nozzle ?? rawTemp.hotend ?? 0,
-      bed: rawTemp.bed ?? 0
+      nozzle: rawTemp.nozzle ?? 0,
+      bed: rawTemp.bed ?? 0,
+      nozzleTarget: rawTemp.nozzleTarget ?? 0,
+      bedTarget: rawTemp.bedTarget ?? 0
     };
 
     // 4. Metadata
     frame.feedrate = raw.feedrate || raw.f || 0;
     frame.layer = raw.layer || 0;
+    frame.layers = raw.layers || 0;
+    frame.progress = raw.progress || 0;
+    frame.duration = raw.duration || 0;
+    frame.timeElapsed = raw.timeElapsed || 0;
+    frame.timeLeft = raw.timeLeft || 0;
     
     // 5. Status
     const rawStatus = raw.status || {};
     frame.status = {
-      isPrinting: rawStatus.isPrinting ?? true,
-      isPaused: rawStatus.isPaused ?? false,
-      isHomed: rawStatus.isHomed ?? true
+      isPrinting: rawStatus.isPrinting ?? raw.isPrinting ?? false,
+      isPaused: rawStatus.isPaused ?? raw.isPaused ?? false,
+      isHomed: rawStatus.isHomed ?? raw.isHomed ?? true,
+      state: rawStatus.state ?? raw.state ?? "IDLE"
     };
 
     return frame;

@@ -2,11 +2,27 @@ import React from 'react';
 import { useFleetStore } from '../../store/useFleetStore.js';
 
 export function TopBar() {
-  const { uiModals, toggleModal, printerStatus, setPrinterStatus, addLogEntry } = useFleetStore();
+  const { 
+    uiModals, 
+    toggleModal, 
+    printerStatus, 
+    setPrinterStatus, 
+    activePrinterId,
+    addLogEntry 
+  } = useFleetStore();
 
-  const handleStatusChange = (newStatus) => {
+  const handleStatusChange = async (newStatus) => {
     setPrinterStatus(newStatus);
-    addLogEntry(`Octoprint status transitioned to [${newStatus.toUpperCase()}]`, "SYS");
+    addLogEntry(`SYSTEM: Transitioning to [${newStatus.toUpperCase()}] mode...`, "SYS");
+    
+    if (newStatus === 'standalone' || newStatus === 'disconnected') {
+      const { AppContext } = await import('../../../app_context.js');
+      const printer = AppContext.farm.printers.find(p => p.id === activePrinterId);
+      if (printer) {
+        await printer.switchMode(newStatus);
+      }
+    }
+    
     toggleModal('statusOptions', false);
   };
 
@@ -34,9 +50,15 @@ export function TopBar() {
       </div>
 
       <div className="header-actions">
-        <div className="status-menu-container">
-          <div className="status-trigger" onClick={() => toggleModal('statusOptions')}>
-            <span className={`status-text ${getStatusClass()}`}>{printerStatus.toUpperCase()}</span>
+        <div className={`status-menu-container ${activePrinterId === null ? 'disabled' : ''}`}>
+          <div 
+            className="status-trigger" 
+            onClick={() => activePrinterId !== null && toggleModal('statusOptions')}
+            style={{ opacity: activePrinterId === null ? 0.5 : 1, cursor: activePrinterId === null ? 'not-allowed' : 'pointer' }}
+          >
+            <span className={`status-text ${getStatusClass()}`}>
+              {activePrinterId === null ? "NO PRINTER" : printerStatus.toUpperCase()}
+            </span>
           </div>
           
           {uiModals.statusOptions && (

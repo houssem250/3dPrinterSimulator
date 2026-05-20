@@ -18,6 +18,7 @@ const App = () => {
     selectedAssetForReconfig,
     setSelectedAssetForReconfig,
     updateActiveJob,
+    connectionState,
     deleteAsset
   } = useFleetStore();
 
@@ -72,22 +73,103 @@ const App = () => {
     setWizardData({ name: '', model: '' });
   };
 
-  const handleEstablishConnection = () => {
-    addLogEntry("SYSTEM: Initiating handshaking with Octoprint instance...", "SYS");
-    setTimeout(() => {
-      setPrinterStatus('connected');
-      addLogEntry("SYSTEM: Octoprint connection established.", "SYS");
-      toggleModal('configPane', false);
-    }, 1500);
+  const handleEstablishConnection = async () => {
+    const { 
+      setConnectionState, 
+      setPrinterStatus, 
+      activePrinterId,
+      toggleModal
+    } = useFleetStore.getState();
+
+    const ip = document.getElementById('octo-ip').value;
+    const apiKey = document.getElementById('octo-key').value;
+
+    if (!ip || !apiKey) {
+      setConnectionState('error', "IP and API Key are required.");
+      return;
+    }
+
+    setConnectionState('testing', "Verifying OctoPrint availability...");
+    addLogEntry(`SYSTEM: Verifying OctoPrint at ${ip}...`, "SYS");
+
+    const { OctoPrintService } = await import('./services/OctoPrintService.js');
+    const result = await OctoPrintService.verifyConnection(ip, apiKey);
+
+    if (result.success) {
+      setConnectionState('success', result.message);
+      addLogEntry(`SUCCESS: ${result.message}`, "SYS");
+      
+      // Persist credentials for remote control
+      useFleetStore.getState().updateActiveJob({ 
+        connectionConfig: { ip, apiKey } 
+      });
+
+      // Fetch immediate state to sync UI
+      const stateSync = await OctoPrintService.fetchCurrentState(ip, apiKey);
+      if (stateSync.success) {
+        updateActiveJob({
+          isPrinting: stateSync.isPrinting,
+          isPaused: stateSync.isPaused,
+          fileName: stateSync.fileName,
+          progress: stateSync.progress,
+          htemp: stateSync.temp.nozzle + " °C",
+          btemp: stateSync.temp.bed + " °C"
+        });
+        if (!stateSync.isOperational) {
+          addLogEntry("WARNING: OctoPrint is reachable, but the printer is DISCONNECTED (Serial Port). Please connect it in OctoPrint UI.", "SYS");
+        }
+      }
+      
+      // Now switch the actual printer instance mode
+      const { AppContext } = await import('../app_context.js');
+      const printer = AppContext.farm.printers.find(p => p.id === activePrinterId);
+      
+      if (printer) {
+        // Extract hostname in case user entered "ip:port" (e.g. localhost:5000)
+        const hostname = ip.split(':')[0].replace('http://', '').replace('https://', '');
+        
+        // Construct the MQTT WebSocket URL based on the hostname
+        const mqttUrl = `ws://${hostname}:9001`;
+        
+        await printer.switchMode('stream', { url: mqttUrl });
+        setPrinterStatus('connected');
+        
+        setTimeout(() => {
+          toggleModal('configPane', false);
+          setConnectionState('idle', "Awaiting parameters...");
+        }, 1000);
+      }
+    } else {
+      setConnectionState('error', result.message);
+      addLogEntry(`ERROR: ${result.message}`, "SYS");
+    }
   };
 
-  const handleFileUpload = (e) => {
+  const handleFileUpload = async (e) => {
     const file = e.target.files[0];
     if (file) {
-      const { activePrinterId } = useFleetStore.getState();
+      const { activePrinterId, printers, updateActiveJob, addLogEntry } = useFleetStore.getState();
       if (activePrinterId === null) {
         addLogEntry("ERROR: No active printer selected for upload.", "SYS");
         return;
+      }
+
+      const activePrinter = printers[activePrinterId];
+
+      // Handle Remote Upload if in Stream Mode
+      if (activePrinter?.mode === 'stream' && activePrinter?.connectionConfig) {
+        const { OctoPrintControlService } = await import('./services/OctoPrintControlService.js');
+        const { ip, apiKey } = activePrinter.connectionConfig;
+        
+        addLogEntry(`SYSTEM: Uploading ${file.name} to OctoPrint at ${ip}...`, "SYS");
+        const success = await OctoPrintControlService.uploadFile(ip, apiKey, file);
+        
+        if (success) {
+          addLogEntry(`SUCCESS: ${file.name} uploaded to OctoPrint.`, "SYS");
+        } else {
+          addLogEntry(`ERROR: Failed to upload ${file.name} to OctoPrint.`, "SYS");
+        }
+        // Even for remote, we might want to load it locally for preview
       }
 
       const reader = new FileReader();
@@ -118,7 +200,8 @@ const App = () => {
               htemp: loader.stats.hotendTemp ? `${Math.round(loader.stats.hotendTemp)} °C` : "---",
               btemp: loader.stats.bedTemp ? `${Math.round(loader.stats.bedTemp)} °C` : "---",
               filament: `${loader.stats.estimatedFilament.toFixed(1)} mm`,
-              kfactor: loader.stats.linearAdvanceK !== null ? `K=${loader.stats.linearAdvanceK}` : "---"
+              kfactor: loader.stats.linearAdvanceK !== null ? `K=${loader.stats.linearAdvanceK}` : "---",
+              totalTime: loader.stats.estimatedTimeSec
             });
             
             addLogEntry(`SYSTEM: Loaded ${loader.moves.length} moves into Printer ${activePrinterId}. Ready to print.`, "SYS");
@@ -145,13 +228,17 @@ const App = () => {
           </div>
           <div className="config-body">
             <label>Client Instance IP</label>
-            <input type="text" defaultValue="192.168.1.42" id="octo-ip" className="industrial-input" />
+            <input type="text" defaultValue="localhost:5000" id="octo-ip" className="industrial-input" />
             <label>API Key</label>
             <input type="password" defaultValue="••••••••••••••••" id="octo-key" className="industrial-input" />
-            <div id="test-feedback" className="test-idle">Awaiting parameters...</div>
+            <div id="test-feedback" className={`test-${connectionState.status}`}>
+              {connectionState.message}
+            </div>
             <div className="modal-footer">
               <button className="secondary-btn" onClick={() => toggleModal('configPane', false)}>Cancel</button>
-              <button className="action-btn" onClick={handleEstablishConnection}>Establish Connection</button>
+              <button className="action-btn" onClick={handleEstablishConnection} disabled={connectionState.status === 'testing'}>
+                {connectionState.status === 'testing' ? "Connecting..." : "Establish Connection"}
+              </button>
             </div>
           </div>
         </div>

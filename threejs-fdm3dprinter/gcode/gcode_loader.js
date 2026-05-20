@@ -125,7 +125,11 @@ export class GCodeLoader {
     let absoluteE = true;   // M82 / M83
     let inchMode = false;  // G20 / G21
     let curX = 0, curY = 0, curZ = 0, curE = 0;
+
     let lastZ = null;
+    let maxZ = -Infinity;
+    let layerChangeFlag = false; // Tripped by comments, cleared by movement
+
     let currentF = 1800;   // mm/min
     let currentLayer = 0;
     let cmdIndex = 0; // Incremental pointer for synchronization
@@ -138,7 +142,10 @@ export class GCodeLoader {
 
       // ── Slicer metadata comments ─────────────────────────────────────────
       if (trimmed.startsWith(';')) {
-        this._parseMetaComment(trimmed);
+        // this._parseMetaComment(trimmed);
+        if (this._parseMetaComment(trimmed)) {
+          layerChangeFlag = true;
+        }
         continue;
       }
 
@@ -177,7 +184,7 @@ export class GCodeLoader {
         if (eVal !== undefined) {
           eDelta = absoluteE ? (eVal - curE) : eVal;
         }
-        
+
         const hasXY = (params.X !== undefined || params.Y !== undefined);
         move.isExtruding = (cmd === 'G1' && eVal !== undefined && eDelta > 0.001 && hasXY);
 
@@ -195,7 +202,22 @@ export class GCodeLoader {
 
         // Layer detection via Z change
         if (move.Z !== undefined && move.Z !== lastZ) {
-          if (lastZ !== null) this.stats.layers++;
+          // if (lastZ !== null) this.stats.layers++;
+          // lastZ = move.Z;
+          /**
+           * Logic: 
+           * 1. If a comment explicitly said "LAYER_CHANGE", increment.
+           * 2. Fallback: If no comment, only increment if this Z is higher 
+           * than any Z we've seen AND we are actually extruding.
+           */
+          if (layerChangeFlag) {
+            this.stats.layers++;
+            maxZ = Math.max(maxZ, move.Z);
+            layerChangeFlag = false; // Reset flag
+          } else if (move.Z > maxZ && move.isExtruding) {
+            this.stats.layers++;
+            maxZ = move.Z;
+          }
           lastZ = move.Z;
         }
 
@@ -395,6 +417,7 @@ export class GCodeLoader {
    * @param {string} commentLine  The full line starting with ';'.
    */
   _parseMetaComment(commentLine) {
+    let detectedChange = false;
     // ;HEIGHT:<n>
     let m = commentLine.match(/^;HEIGHT:([\d.]+)/i);
     if (m) {
@@ -411,12 +434,18 @@ export class GCodeLoader {
       return;
     }
 
-    // ;LAYER:<n>  (Cura) or ;LAYER_CHANGE (PrusaSlicer)
+    // ;LAYER:<n> (Cura) or ;LAYER_CHANGE (PrusaSlicer)
     m = commentLine.match(/^;LAYER:(\d+)/i);
     if (m) {
       this.stats.currentLayer = parseInt(m[1], 10);
       this.moves.push({ cmd: 'SET_LAYER', value: this.stats.currentLayer });
-      return;
+      return true;
+    }
+
+    if (commentLine.toUpperCase().startsWith(';LAYER_CHANGE')) {
+      this.stats.currentLayer++;
+      this.moves.push({ cmd: 'SET_LAYER', value: this.stats.currentLayer });
+      return true;
     }
 
     // ;TYPE:<segment-type>  e.g. WALL-INNER, FILL, SUPPORT, SKIRT
@@ -430,6 +459,16 @@ export class GCodeLoader {
     m = commentLine.match(/^;LAYER_COUNT:(\d+)/i);
     if (m) { this.stats.totalLayers = parseInt(m[1], 10); return; }
 
+    // ; estimated printing time (normal mode) = 1h 46m 23s
+    m = commentLine.match(/^;\s*estimated printing time.*=\s*(?:(\d+)h\s*)?(?:(\d+)m\s*)?(?:(\d+)s)?/i);
+    if (m) {
+      const h = parseInt(m[1] || 0, 10);
+      const min = parseInt(m[2] || 0, 10);
+      const s = parseInt(m[3] || 0, 10);
+      this.stats.estimatedTimeSec = (h * 3600) + (min * 60) + s;
+      return;
+    }
+
     // ;TIME:<s>  — estimated print time in seconds
     m = commentLine.match(/^;TIME:(\d+)/i);
     if (m) { this.stats.estimatedTimeSec = parseInt(m[1], 10); return; }
@@ -437,6 +476,8 @@ export class GCodeLoader {
     // ;Filament used: <n> m
     m = commentLine.match(/;Filament used:\s*([\d.]+)\s*m/i);
     if (m) { this.stats.slicerFilamentM = parseFloat(m[1]); return; }
+
+    return detectedChange;
   }
 
   // ── Diagnostics ─────────────────────────────────────────────────────────────

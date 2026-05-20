@@ -99,9 +99,15 @@ export class PrinterState {
       temp: this.current.temp,
       status: {
         isPrinting: this.current.status ? this.current.status.isPrinting : false,
-        isHomed: this.current.status ? this.current.status.isHomed : false
+        isPaused: this.current.status ? this.current.status.isPaused : false,
+        isHomed: this.current.status ? this.current.status.isHomed : false,
+        state: this.current.status ? this.current.status.state : 'IDLE'
       },
       layer: this.current.layer,
+      progress: this.current.progress,
+      duration: this.current.duration,
+      timeElapsed: this.current.timeElapsed,
+      timeLeft: this.current.timeLeft,
       historyCount: this.history.length
     };
   }

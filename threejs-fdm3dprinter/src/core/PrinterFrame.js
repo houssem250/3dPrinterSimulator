@@ -19,7 +19,9 @@ export class PrinterFrame {
       is_extruding: false,
       feedrate: 0,
       layer: 0,
-      status: { isPrinting: false, isPaused: false, isHomed: false },
+      progress: 0,
+      duration: 0,
+      status: { isPrinting: false, isPaused: false, isHomed: false, state: 'IDLE' },
     };
   }
 

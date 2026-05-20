@@ -16,12 +16,12 @@ export class StandaloneProvider extends BaseProvider {
   constructor(normalizer) {
     super(normalizer);
     this.name = 'StandaloneProvider';
-    
+
     this.moves = [];
     this.isRunning = false;
     this.isPaused = false;
     this.currentIndex = 0;
-    
+
     // Virtual Machine State
     this.state = {
       x: 0, y: 0, z: 0, e: 0, f: PRINTER_CONFIG.defaults.motion.feedrate,
@@ -30,7 +30,7 @@ export class StandaloneProvider extends BaseProvider {
       retractBudget: 0,
       currentLayer: 0,
     };
-    
+
     this.speedMultiplier = PRINTER_CONFIG.PRINTING.DEFAULT_SPEED_MULTIPLIER;
   }
 
@@ -43,12 +43,12 @@ export class StandaloneProvider extends BaseProvider {
   getFrameAtIndex(cmdIndex) {
     // cmdIndex is monotonic in this.moves, so we search for the last matching move
     // to ensure we get the final destination of that command (e.g. end of an arc)
-    const move = this.moves.findLast ? 
+    const move = this.moves.findLast ?
       this.moves.findLast(m => m.cmdIndex === cmdIndex) :
       [...this.moves].reverse().find(m => m.cmdIndex === cmdIndex);
 
     if (!move) return null;
-    
+
     return this.normalizer.normalize({
       pos: { x: move.X, y: move.Y, z: move.Z, e: move.E },
       is_extruding: move.isExtruding,
@@ -69,15 +69,19 @@ export class StandaloneProvider extends BaseProvider {
   }
 
   async start() {
+    // Provider is now active, but we don't start the loop yet
+    super.start();
+    console.log('StandaloneProvider: Active and ready.');
+  }
+
+  async print() {
     if (this.isRunning) return;
     if (this.moves.length === 0) {
       console.warn('StandaloneProvider: No moves loaded.');
       return;
     }
-    
+
     this.isRunning = true;
-    super.start();
-    
     await this._runLoop();
   }
 
@@ -94,6 +98,8 @@ export class StandaloneProvider extends BaseProvider {
    * @private
    */
   async _runLoop() {
+    let lastLoggedPct = -1;
+
     for (let i = this.currentIndex; i < this.moves.length; i++) {
       if (!this.isRunning) break;
 
@@ -105,8 +111,15 @@ export class StandaloneProvider extends BaseProvider {
       this.currentIndex = i;
       const move = this.moves[i];
       await this._processMove(move);
+
+      // Throttled logging to avoid console spam (log every 1%)
+      const pct = Math.round((i / this.moves.length) * 100);
+      if (pct !== lastLoggedPct) {
+        console.log(`[Simulation] Progress: ${pct}% | Layer: ${this.state.currentLayer} | Nozzle: ${this.state.targetNozzle || 0}°C | Bed: ${this.state.targetBed || 0}°C`);
+        lastLoggedPct = pct;
+      }
     }
-    
+
     this.isRunning = false;
     console.log('StandaloneProvider: Finished execution.');
   }
@@ -138,18 +151,30 @@ export class StandaloneProvider extends BaseProvider {
       if (move.Y !== undefined) { this.state.offsetY = this.state.y - move.Y; this.state.y = move.Y; }
       if (move.Z !== undefined) { this.state.offsetZ = this.state.z - move.Z; this.state.z = move.Z; }
       if (move.E !== undefined) {
-         if (this.state.lastE !== undefined) {
-           this.state.retractBudget = (this.state.lastE > move.E) ? (this.state.lastE - move.E) : 0;
-         }
-         this.state.lastE = move.E;
+        if (this.state.lastE !== undefined) {
+          this.state.retractBudget = (this.state.lastE > move.E) ? (this.state.lastE - move.E) : 0;
+        }
+        this.state.lastE = move.E;
       }
       return;
     }
 
     // 4. M-Commands (minimal implementation for demo)
     if (cmd === 'M104' || cmd === 'M109' || cmd === 'M140' || cmd === 'M190') {
-      // Just emit temp update
-      this.emit({ temp: { nozzle: move.temp || 0, bed: (cmd.startsWith('M14') || cmd.startsWith('M19')) ? move.temp : 0 } });
+      const isBed = cmd.startsWith('M14') || cmd.startsWith('M19');
+      const temp = move.temp || 0;
+
+      if (isBed) this.state.targetBed = temp;
+      else this.state.targetNozzle = temp;
+
+      this.emit({ 
+        temp: { 
+          nozzle: this.state.targetNozzle || 0, 
+          bed: this.state.targetBed || 0,
+          nozzleTarget: this.state.targetNozzle || 0,
+          bedTarget: this.state.targetBed || 0
+        } 
+      });
       if (cmd === 'M109' || cmd === 'M190') await this._delay(50);
       return;
     }
@@ -169,7 +194,7 @@ export class StandaloneProvider extends BaseProvider {
       const dx = adjX - (this.state.x + this.state.offsetX);
       const dy = adjY - (this.state.y + this.state.offsetY);
       const dz = adjZ - (this.state.z + this.state.offsetZ);
-      const dist = Math.sqrt(dx*dx + dy*dy + dz*dz);
+      const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
 
       const hasXY = (Math.abs(dx) + Math.abs(dy)) > 0.001;
       const extruding = this._checkExtrusion(cmd, move, hasXY);
@@ -183,7 +208,7 @@ export class StandaloneProvider extends BaseProvider {
         is_extruding: extruding,
         feedrate: this.state.f,
         layer: this.state.currentLayer,
-        progress: Math.round(((this.currentIndex + 1) / this.moves.length) * 100),
+        progress: Math.round(((this.currentIndex) / this.moves.length) * 100),
         duration: duration
       });
 
