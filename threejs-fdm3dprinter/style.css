@@ -327,22 +327,53 @@ body {
 
 .alert-item.expanded .alert-detail {
     max-height: 200px;
-    /* Large enough for detailed text */
     padding: 10px;
     border-top: 1px solid var(--border);
 }
 
-/*
-.alert-item.critical { border-left: 3px solid var(--accent-red); }
-.alert-item.warning { border-left: 3px solid var(--accent-amber); }
-*/
+/* Stage 2: Fix Wizard active — keep detail expanded AND show wizard */
+.alert-item.fixing {
+    border-color: var(--accent-green);
+    box-shadow: 0 0 15px rgba(0, 255, 194, 0.1);
+}
+
+.alert-item.fixing .alert-detail {
+    max-height: 200px;
+    padding: 10px;
+    border-top: 1px solid var(--border);
+}
+
+/* Collapse expand icon */
 .expand-icon {
     font-size: 8px;
     transition: transform 0.3s;
+    display: inline-block;
 }
 
 .alert-item.expanded .expand-icon {
     transform: rotate(180deg);
+}
+
+/* Status dot colors — ported from vanilla_ui inline styles */
+.status-dot {
+    margin-right: 8px;
+}
+
+.status-dot.critical {
+    color: var(--accent-red);
+}
+
+.status-dot.warning {
+    color: var(--accent-amber);
+}
+
+/* Alert type left-border severity indicators */
+.alert-item.critical {
+    border-left: 3px solid var(--accent-red);
+}
+
+.alert-item.warning {
+    border-left: 3px solid var(--accent-amber);
 }
 
 /* 5. Footer */
@@ -492,6 +523,8 @@ body {
     color: var(--text-main);
     cursor: pointer;
     font-size: 11px;
+    padding: 5px 0;
+    border-radius: 5px;
 }
 
 .secondary-btn:hover {
@@ -1225,38 +1258,7 @@ body {
 
 
 
-/* --- Multi-Stage Alert Feed --- */
-.alert-item {
-    background: rgba(255, 255, 255, 0.03);
-    border-radius: 4px;
-    border: 1px solid var(--border);
-    overflow: hidden;
-    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-    cursor: pointer;
-    max-height: 38px;
-    /* Height of header only */
-    margin-bottom: 8px;
-}
-
-/* Stage 1: Basic Expansion (Details) */
-.alert-item.expanded {
-    max-height: 180px;
-    background: rgba(255, 255, 255, 0.06);
-}
-
-/* Stage 2: Deep Expansion (Fix Wizard) */
-.alert-item.fixing {
-    max-height: 500px;
-    /* Large enough for steps */
-    border-color: var(--accent-green);
-    box-shadow: 0 0 15px rgba(0, 255, 194, 0.1);
-}
-
-.alert-detail {
-    padding: 12px;
-    font-size: 10px;
-    border-top: 1px solid var(--border);
-}
+/* --- Multi-Stage Alert Feed (Fix Wizard additions) --- */
 
 /* The Wizard Pane - Hidden by default */
 .fix-wizard-pane {
@@ -1267,6 +1269,15 @@ body {
     animation: slideDown 0.3s ease-out;
 }
 
+/* Step text inside the wizard */
+.step-text {
+    font-size: 11px;
+    font-family: var(--font-mono);
+    color: #ccc;
+    line-height: 1.6;
+    margin-bottom: 5px;
+}
+
 /* Reveal wizard only when .fixing class is present */
 .alert-item.fixing .fix-wizard-pane {
     display: block;
@@ -1275,6 +1286,15 @@ body {
 /* Hide the initial "Fix Now" button once fixing starts */
 .alert-item.fixing .initial-fix-btn {
     display: none;
+}
+
+/* Select-all master checkbox visual distinction */
+.check-container.select-all {
+    font-weight: 700;
+    color: var(--accent-green);
+    letter-spacing: 0.5px;
+    font-size: 10px;
+    text-transform: uppercase;
 }
 
 @keyframes slideDown {
@@ -1380,7 +1400,7 @@ body {
     align-items: flex-start;
     gap: 0;
     /* Gap is handled by the item width */
-    min-width: max-content;
+    width: 100%;
     padding-top: 10px;
 }
 
@@ -1464,13 +1484,19 @@ body {
     height: 100%;
 }
 
-/* Hide scrollbar but keep functionality */
+/* Make scrollbar clearly visible */
 .timeline-h::-webkit-scrollbar {
-    height: 2px;
+    height: 8px;
+}
+
+.timeline-h::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 4px;
 }
 
 .timeline-h::-webkit-scrollbar-thumb {
     background: var(--accent-green);
+    border-radius: 4px;
 }
 
 /* Adjust the G-Code terminal position so it doesn't overlap the timeline */
@@ -1922,4 +1948,185 @@ body {
 /* Cursor crosshair dots */
 .uplot .u-cursor-pt {
     border-radius: 50% !important;
+}
+
+/* --- CALIBRATION TEST EXECUTION ENGINE UI --- */
+.calibration-steps-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 15px;
+    max-height: 280px;
+    overflow-y: auto;
+}
+
+.cal-step-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-family: monospace;
+    background: rgba(255, 255, 255, 0.02);
+    border-left: 3px solid #333;
+    transition: all 0.3s ease;
+}
+
+.cal-step-row.processing {
+    border-left-color: var(--accent-green);
+    color: #fff;
+    background: rgba(0, 243, 255, 0.02);
+}
+
+.cal-step-row.success {
+    border-left-color: var(--accent-green);
+    background: rgba(57, 255, 20, 0.04);
+    color: var(--accent-green);
+}
+
+.cal-step-row.failed {
+    border-left-color: var(--accent-red);
+    background: rgba(255, 0, 85, 0.04);
+    color: #ff6b8b;
+}
+
+/* AI Style Scanning/Pulse Dot Spinner */
+.cal-spinner {
+    width: 10px;
+    height: 10px;
+    border: 2px solid rgba(57, 255, 20, 0.1);
+    border-top-color: var(--accent-green);
+    border-radius: 50%;
+    animation: calSpin 0.8s linear infinite;
+    flex-shrink: 0;
+}
+
+@keyframes calSpin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+/* --- G-Code Console Box Preview --- */
+.gcode-preview-container {
+    background: rgba(0, 0, 0, 0.4);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 8px;
+}
+
+#cal-gcode-preview {
+    margin: 0;
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 10px;
+    color: #aae4ff;
+    /* Cool code blue color */
+    max-height: 110px;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    word-break: break-all;
+    line-height: 1.4;
+}
+
+/* Custom scrollbar for the preview block */
+#cal-gcode-preview::-webkit-scrollbar {
+    width: 4px;
+}
+
+#cal-gcode-preview::-webkit-scrollbar-thumb {
+    background: var(--border);
+    border-radius: 2px;
+}
+
+/* --- WIDESCREEN CALIBRATION MODAL OVERLAY --- */
+.cal-modal-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(0, 0, 0, 0.75);
+    backdrop-filter: blur(8px);
+    z-index: 200;
+    /* Over everything */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s ease;
+}
+
+.cal-modal-overlay.active {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+.cal-modal-window {
+    background: #0d0f12;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    width: 700px;
+    padding: 5px 10px;
+    max-width: 90vw;
+    max-height: 80vh;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6);
+}
+
+.cal-modal-body {
+    padding: 20px;
+    overflow-y: auto;
+    flex: 1;
+}
+
+#cal-modal-gcode-view {
+    background: #050709;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    padding: 15px;
+    font-family: 'Courier New', monospace;
+    font-size: 11px;
+    color: #aae4ff;
+    max-height: 350px;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    line-height: 1.5;
+    border-radius: 4px;
+}
+
+/* --- DYNAMIC TROUBLESHOOTING GUIDE CARDS --- */
+.diagnostic-guide-box {
+    margin-top: 15px;
+    padding: 12px;
+    background: rgba(255, 107, 139, 0.05);
+    border: 1px solid rgba(255, 107, 139, 0.2);
+    border-radius: 4px;
+}
+
+.diagnostic-title {
+    font-size: 11px;
+    font-weight: bold;
+    color: #ff6b8b;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.diagnostic-steps {
+    margin: 0;
+    padding-left: 18px;
+    font-size: 11px;
+    color: var(--text-dim);
+    line-height: 1.6;
+}
+
+.diagnostic-steps li {
+    margin-bottom: 4px;
+}
+
+.diagnostic-steps strong {
+    color: #eee;
 }

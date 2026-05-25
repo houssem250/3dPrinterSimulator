@@ -1,10 +1,34 @@
-import React from 'react';
+import React, { useRef } from 'react';
 import { useFleetStore } from '../../store/useFleetStore.js';
 import SceneView from '../scene/SceneView.jsx';
 
 export function MainViewport() {
-  const { activePrinterId, printers, paneStates, togglePane, terminalLogs, horizontalEvents, placementMode, setPlacementMode } = useFleetStore();
+  const { activePrinterId, printers, paneStates, togglePane, terminalLogs, horizontalEvents, placementMode, setPlacementMode, fleetGroups } = useFleetStore();
+  const timelineRef = useRef(null);
+
   const activePrinter = printers[activePrinterId] || printers[0];
+
+  const getPrinterName = (id) => {
+    if (id === null) return null;
+    for (const group of fleetGroups || []) {
+      const asset = group.assets.find(a => a.id === id);
+      if (asset) return asset.name;
+    }
+    return `Asset ${id}`;
+  };
+
+  const handleWheel = (e) => {
+    if (timelineRef.current) {
+      timelineRef.current.scrollLeft += e.deltaY;
+    }
+  };
+
+  const hasActivePrinter = activePrinterId !== null && printers[activePrinterId];
+  const displayPrinter = hasActivePrinter ? printers[activePrinterId] : null;
+  const displayEvents = displayPrinter?.timeline || horizontalEvents;
+  const displayTitle = displayPrinter 
+    ? `TIMELINE - ${getPrinterName(activePrinterId)}` 
+    : 'SESSION TIMELINE - GLOBAL PRINT FARM';
 
   return (
     <main className="canvas-viewport">
@@ -63,30 +87,32 @@ export function MainViewport() {
       </div>
 
       {/* Timeline - Floating bottom center/right */}
-      <div
-        className={`sub-pane timeline-wrapper ${!paneStates.bottom ? 'collapsed' : ''}`}
-        style={{
-          marginLeft: paneStates.left ? '320px' : '0px',
-          marginRight: paneStates.right ? '340px' : '0px'
-        }}
-      >
-        <button className="pane-toggle-btn" id="toggle-bottom" onClick={() => togglePane('bottom')}>
-          {paneStates.bottom ? '▼' : '▲'}
-        </button>
-        <div className="pane-header">
-          <span className="led">LOG</span>
-          <h6>SESSION TIMELINE</h6>
+      {activePrinterId !== null && (
+        <div
+          className={`sub-pane timeline-wrapper ${!paneStates.bottom ? 'collapsed' : ''}`}
+          style={{
+            marginLeft: paneStates.left ? '320px' : '0px',
+            marginRight: paneStates.right ? '340px' : '0px'
+          }}
+        >
+          <button className="pane-toggle-btn" id="toggle-bottom" onClick={() => togglePane('bottom')}>
+            {paneStates.bottom ? '▼' : '▲'}
+          </button>
+          <div className="pane-header">
+            <span className="led">LOG</span>
+            <h6>{displayTitle}</h6>
+          </div>
+          <div id="event-timeline-h" className="timeline-h" ref={timelineRef} onWheel={handleWheel}>
+            {displayEvents.map((event, idx) => (
+              <div key={idx} className={`event-point-h ${event.status}`}>
+                <div className="dot-h"></div>
+                <div className="time-h">{event.time}</div>
+                <div className="desc-h">{event.desc}</div>
+              </div>
+            ))}
+          </div>
         </div>
-        <div id="event-timeline-h" className="timeline-h">
-          {horizontalEvents.map((event, idx) => (
-            <div key={idx} className={`event-point-h ${event.status}`}>
-              <div className="dot-h"></div>
-              <div className="time-h">{event.time}</div>
-              <div className="desc-h">{event.desc}</div>
-            </div>
-          ))}
-        </div>
-      </div>
+      )}
     </main>
   );
 }

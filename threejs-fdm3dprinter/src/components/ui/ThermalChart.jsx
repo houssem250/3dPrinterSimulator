@@ -35,7 +35,7 @@ export function ThermalChart({ history = [] }) {
       focus: { prox: 16 },
     },
     legend: { show: false },
-    padding: [6, 4, 0, 0],
+    padding: [6, 4, 12, 0],
     axes: [
       // X axis – hidden (we rely on the legend overlay below)
       {

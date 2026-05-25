@@ -850,17 +850,17 @@ body {
 
 
 /* --- Multi-Stage Alert Feed --- */
-.alert-item {
+/*.alert-item {
     background: rgba(255, 255, 255, 0.03);
     border-radius: 4px;
     border: 1px solid var(--border);
     overflow: hidden;
     transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
     cursor: pointer;
-    max-height: 38px; /* Height of header only */
+    max-height: 38px;
     margin-bottom: 8px;
 }
-
+*/
 /* Stage 1: Basic Expansion (Details) */
 .alert-item.expanded {
     max-height: 180px; 
@@ -1291,4 +1291,374 @@ body {
     height: 25px;
     border-radius: 4px 4px 0 0;
     display: block;
+}
+
+/*/////////////////////////////*/
+/* --- CALIBRATION TEST EXECUTION ENGINE UI --- */
+.calibration-steps-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 15px;
+    max-height: 280px;
+    overflow-y: auto;
+}
+
+.cal-step-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-family: monospace;
+    background: rgba(255, 255, 255, 0.02);
+    border-left: 3px solid #333;
+    transition: all 0.3s ease;
+}
+
+.cal-step-row.processing {
+    border-left-color: var(--accent-green);
+    color: #fff;
+    background: rgba(0, 243, 255, 0.02);
+}
+
+.cal-step-row.success {
+    border-left-color: var(--accent-green);
+    background: rgba(57, 255, 20, 0.04);
+    color: var(--accent-green);
+}
+
+.cal-step-row.failed {
+    border-left-color: var(--accent-red);
+    background: rgba(255, 0, 85, 0.04);
+    color: #ff6b8b;
+}
+
+/* AI Style Scanning/Pulse Dot Spinner */
+.cal-spinner {
+    width: 10px;
+    height: 10px;
+    border: 2px solid rgba(57, 255, 20, 0.1);
+    border-top-color: var(--accent-green);
+    border-radius: 50%;
+    animation: calSpin 0.8s linear infinite;
+    flex-shrink: 0;
+}
+
+@keyframes calSpin {
+    to { transform: rotate(360deg); }
+}
+
+
+/*///////////////////////////////*/
+/* --- G-Code Console Box Preview --- */
+.gcode-preview-container {
+    background: rgba(0, 0, 0, 0.4);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 8px;
+}
+
+#cal-gcode-preview {
+    margin: 0;
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 10px;
+    color: #aae4ff; /* Cool code blue color */
+    max-height: 110px;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    word-break: break-all;
+    line-height: 1.4;
+}
+
+/* Custom scrollbar for the preview block */
+#cal-gcode-preview::-webkit-scrollbar {
+    width: 4px;
+}
+#cal-gcode-preview::-webkit-scrollbar-thumb {
+    background: var(--border);
+    border-radius: 2px;
+}
+
+
+/* --- WIDESCREEN CALIBRATION MODAL OVERLAY --- */
+.cal-modal-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(0, 0, 0, 0.75);
+    backdrop-filter: blur(8px);
+    z-index: 200; /* Over everything */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s ease;
+}
+
+.cal-modal-overlay.active {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+.cal-modal-window {
+    background: #0d0f12;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    width: 700px;
+    max-width: 90vw;
+    max-height: 80vh;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 20px 40px rgba(0,0,0,0.6);
+}
+
+.cal-modal-body {
+    padding: 20px;
+    overflow-y: auto;
+    flex: 1;
+}
+
+#cal-modal-gcode-view {
+    background: #050709;
+    border: 1px solid rgba(255,255,255,0.05);
+    padding: 15px;
+    font-family: 'Courier New', monospace;
+    font-size: 11px;
+    color: #aae4ff;
+    max-height: 350px;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    line-height: 1.5;
+    border-radius: 4px;
+}
+
+/* --- DYNAMIC TROUBLESHOOTING GUIDE CARDS --- */
+.diagnostic-guide-box {
+    margin-top: 15px;
+    padding: 12px;
+    background: rgba(255, 107, 139, 0.05);
+    border: 1px solid rgba(255, 107, 139, 0.2);
+    border-radius: 4px;
+}
+
+.diagnostic-title {
+    font-size: 11px;
+    font-weight: bold;
+    color: #ff6b8b;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.diagnostic-steps {
+    margin: 0;
+    padding-left: 18px;
+    font-size: 11px;
+    color: var(--text-dim);
+    line-height: 1.6;
+}
+
+.diagnostic-steps li {
+    margin-bottom: 4px;
+}
+
+.diagnostic-steps strong {
+    color: #eee;
+}
+
+
+/* ==========================================================================
+   🚨 REAL-TIME TELEMETRY INJECTION & ALERTS INTEGRATION MODULE
+   ========================================================================== */
+
+/* --- 1. TELEMETRY INJECTOR CONTROL DOCK --- */
+.telemetry-injector-dock {
+    background: rgba(255, 255, 255, 0.01) !important;
+    border-bottom: 1px dashed var(--border) !important;
+    padding-bottom: 12px !important;
+}
+
+.trigger-btn {
+    border: 1px solid var(--border);
+    color: #ffffff;
+    text-transform: uppercase;
+    font-weight: bold;
+    cursor: pointer;
+    background: rgba(0, 0, 0, 0.3);
+    transition: all 0.2s ease;
+}
+
+.trigger-btn:hover {
+    background: rgba(255, 255, 255, 0.05);
+    transform: translateY(-1px);
+}
+
+.trigger-btn:active {
+    transform: translateY(0);
+}
+
+/* Explicitly map theme borders/colors matching the button actions */
+.trigger-btn[onclick*="'info'"]:hover {
+    border-color: var(--accent-green);
+    box-shadow: 0 0 6px rgba(0, 255, 194, 0.2);
+}
+
+.trigger-btn[onclick*="'warning'"]:hover {
+    border-color: var(--accent-amber);
+    box-shadow: 0 0 6px rgba(255, 184, 0, 0.2);
+}
+
+.trigger-btn[onclick*="'critical'"] {
+    background: rgba(255, 75, 75, 0.05);
+    border-color: rgba(255, 75, 75, 0.3);
+    color: #ff6b6b;
+}
+
+.trigger-btn[onclick*="'critical'"]:hover {
+    background: rgba(255, 75, 75, 0.15);
+    border-color: var(--accent-red);
+    box-shadow: 0 0 10px rgba(255, 75, 75, 0.3);
+    color: #fff;
+}
+
+
+/* --- 2. PREDICTIVE ALERTS STREAM CONTAINER --- */
+.alert-feed {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-height: 280px; 
+    overflow-y: auto;
+    padding-right: 6px;
+    scroll-behavior: smooth;
+}
+
+/* Custom mini scrollbar track so it doesn't look bulky in your glassmorphic sidebar */
+.alert-feed::-webkit-scrollbar {
+    width: 4px;
+}
+.alert-feed::-webkit-scrollbar-track {
+    background: transparent;
+}
+.alert-feed::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 2px;
+}
+.alert-feed::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.25);
+}
+
+
+/* --- 3. DYNAMIC MULTI-LINE ALERT ROWS --- */
+.alert-item {
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 10px 12px;
+    font-size: 11px;
+    line-height: 1.45;
+    
+    /* Dynamic height calculation fixes */
+    height: auto !important;        /* Breaks out of any text compression limits */
+    min-height: 65px;               /* Keeps consistent baseline look */
+    display: flex;                  
+    flex-direction: column;
+    justify-content: space-between;
+    
+    word-wrap: break-word;          
+    overflow: visible !important;   
+    
+    transition: all 0.3s ease;
+    animation: slideInAlert 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.alert-item-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 4px;
+}
+
+.alert-msg {
+    color: #e0e0e0;
+    margin-top: 4px;
+    height: auto;
+    overflow: visible;
+    white-space: normal;            /* Allow texts to break down into 2-4 rows gracefully */
+}
+
+.alert-action-hint {
+    font-size: 10px;
+    color: var(--accent-green);
+    margin-top: 6px;
+    font-style: italic;
+    cursor: pointer;
+    display: inline-block;
+}
+
+.alert-action-hint:hover {
+    text-decoration: underline;
+}
+
+
+/* --- 4. SEVERITY COLOR BLOCKS & ANIMATION MATRICES --- */
+.alert-badge {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    font-weight: bold;
+    padding: 1px 5px;
+    border-radius: 2px;
+    text-transform: uppercase;
+}
+
+.alert-badge.critical {
+    background: rgba(255, 75, 75, 0.15);
+    color: var(--accent-red);
+    border: 1px solid rgba(255, 75, 75, 0.3);
+}
+
+.alert-badge.warning {
+    background: rgba(255, 184, 0, 0.15);
+    color: var(--accent-amber);
+    border: 1px solid rgba(255, 184, 0, 0.3);
+}
+
+.alert-badge.info {
+    background: rgba(0, 255, 194, 0.15);
+    color: var(--accent-green);
+    border: 1px solid rgba(0, 255, 194, 0.3);
+}
+
+.alert-time {
+    color: var(--text-dim);
+    font-size: 9px;
+    font-family: var(--font-mono);
+}
+
+/* High Priority Telemetry Streaming Glow Animations */
+.alert-item.critical-pulse {
+    background: linear-gradient(90deg, rgba(255, 75, 75, 0.04) 0%, rgba(255, 255, 255, 0.01) 100%);
+    animation: slideInAlert 0.25s ease-out, criticalGlowPulse 2s infinite alternate;
+}
+
+@keyframes slideInAlert {
+    from { transform: translateY(-5px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+}
+
+@keyframes criticalGlowPulse {
+    0% { 
+        box-shadow: 0 0 4px rgba(255, 75, 75, 0.1); 
+        border-color: rgba(255, 75, 75, 0.3); 
+    }
+    100% { 
+        box-shadow: 0 0 12px rgba(255, 75, 75, 0.25); 
+        border-color: rgba(255, 75, 75, 0.6); 
+    }
 }

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useFleetStore } from '../../store/useFleetStore.js';
+import { TROUBLESHOOTING_DATA } from '../../data/troubleshootingData.js';
 
 export function FleetSidebar() {
   const {
@@ -21,7 +22,10 @@ export function FleetSidebar() {
     updateActiveJob,
     setSelectedAssetForReconfig,
     deleteAsset,
-    setActivePrinter
+    setActivePrinter,
+    calibrationState,
+    updateCalibrationState,
+    toggleCalibrationTest
   } = useFleetStore();
 
   const [searchTerm, setSearchTerm] = useState('');
@@ -260,6 +264,8 @@ export function FleetSidebar() {
       const { ip, apiKey } = activeJob.connectionConfig;
       addLogEntry(`SYSTEM: Remote command [CANCEL] sent to OctoPrint at ${ip}`, "SYS");
       await OctoPrintControlService.issueJobCommand(ip, apiKey, 'cancel');
+      // Optimistically unlock the UI — MQTT will confirm the final state
+      updateActiveJob({ isPrinting: false, isPaused: false, progress: 0 });
     } else {
       setPrintCommand('abort');
       updateActiveJob({ isPrinting: false, isPaused: false, progress: 0 });
@@ -376,7 +382,151 @@ export function FleetSidebar() {
     }
   };
 
+  const simulateAssetHardwarePolling = (moduleKey) => {
+    const times = { extrusion: 6, movement: 8, thermal: 10 };
+    const waitMs = (times[moduleKey] || 6) * 350;
+    return new Promise((resolve) => {
+      setTimeout(() => {
+        resolve(Math.random() > 0.15);
+      }, waitMs);
+    });
+  };
+
+  const getModuleReadableName = (key) => {
+    const names = {
+      extrusion: "Extrusion Feed (E-Steps)",
+      movement: "Kinetic Frame Travel (X/Y/Z)",
+      thermal: "Thermal Stability Loop (PID)"
+    };
+    return names[key] || "Unknown Diagnostic";
+  };
+
+  const openGCodeModal = async () => {
+    if (!calibrationState.selectedTests.extrusion && !calibrationState.selectedTests.movement && !calibrationState.selectedTests.thermal) return;
+    const { generateCalibrationGcode } = await import('../../utils/CalibrationGenerator.js');
+    const gcode = generateCalibrationGcode(currentPrinter, calibrationState.selectedTests);
+    updateCalibrationState({ generatedGcode: gcode });
+    toggleModal('gcodeModal', true);
+  };
+
+  const closeGCodeModal = () => toggleModal('gcodeModal', false);
+
+  const handleStartCalibration = async () => {
+    if (!calibrationState.selectedTests.extrusion && !calibrationState.selectedTests.movement && !calibrationState.selectedTests.thermal) return;
+
+    toggleModal('gcodeModal', false);
+    addLogEntry("EXEC: Initializing hardware test routine", "SYS");
+
+    const { generateCalibrationGcode } = await import('../../utils/CalibrationGenerator.js');
+    const fullGcode = generateCalibrationGcode(currentPrinter, calibrationState.selectedTests);
+
+    updateCalibrationState({ isRunning: true, generatedGcode: fullGcode, currentStepText: "Initializing diagnostic sequences...", results: [] });
+
+    const selectedModules = Object.keys(calibrationState.selectedTests).filter(k => calibrationState.selectedTests[k]);
+    let currentResults = [];
+
+    for (let i = 0; i < selectedModules.length; i++) {
+        const moduleKey = selectedModules[i];
+        const moduleName = getModuleReadableName(moduleKey);
+
+        currentResults = [...currentResults, { id: moduleKey, name: moduleName, status: 'processing' }];
+        updateCalibrationState({ results: currentResults, currentStepText: `Executing [${moduleKey.toUpperCase()}] diagnostics...` });
+        addLogEntry(`EXEC: Initializing hardware test routine [${moduleKey.toUpperCase()}]`, "SYS");
+
+        // Generate isolated G-Code chunk for this test only
+        const chunkGcode = generateCalibrationGcode(currentPrinter, { [moduleKey]: true });
+
+        let testSuccessResult = false;
+
+        if (activeJob.mode === 'stream' && activeJob.connectionConfig) {
+            // --- STREAM MODE: Upload individual file + await MQTT-driven completion ---
+            try {
+                const { OctoPrintControlService } = await import('../../services/OctoPrintControlService.js');
+                const { ip, apiKey } = activeJob.connectionConfig;
+                const fileName = `calib_${moduleKey}.gcode`;
+                const file = new File([chunkGcode], fileName, { type: 'text/plain' });
+
+                addLogEntry(`UPLOAD: Sending [${fileName}] to OctoPrint at ${ip}`, "SYS");
+                const uploaded = await OctoPrintControlService.uploadFile(ip, apiKey, file);
+
+                if (!uploaded) {
+                    addLogEntry(`ERROR: Upload failed for ${fileName}.`, "SYS");
+                } else {
+                    addLogEntry(`EXEC: Starting print job [${fileName}] on physical asset...`, "SYS");
+                    await OctoPrintControlService.selectAndPrint(ip, apiKey, fileName);
+
+                    // Grace period for OctoPrint to transition to PRINTING state via MQTT
+                    await new Promise(resolve => setTimeout(resolve, 2500));
+
+                    // Subscribe to Zustand store — MQTT updates printer state here.
+                    // Await until MQTT broadcasts that the printer is no longer printing.
+                    testSuccessResult = await new Promise((resolve) => {
+                        const TIMEOUT_MS = 10 * 60 * 1000; // 10-min safety cap per module
+                        const timeoutHandle = setTimeout(() => {
+                            unsub();
+                            addLogEntry(`WARN: [${moduleKey.toUpperCase()}] timed out — no completion signal received.`, "SYS");
+                            resolve(false);
+                        }, TIMEOUT_MS);
+
+                        const unsub = useFleetStore.subscribe(
+                            (state) => state.printers[activePrinterId],
+                            (printer) => {
+                                if (!printer) return;
+                                const printing = !!(printer.status?.isPrinting || printer.isPrinting);
+                                const jobState = (printer.status?.state || printer.state || '').toUpperCase();
+
+                                if (!printing || jobState === 'PRINTDONE' || jobState === 'PRINTFAILED' || jobState === 'PRINTCANCELLED') {
+                                    clearTimeout(timeoutHandle);
+                                    unsub();
+                                    resolve(jobState !== 'PRINTFAILED' && jobState !== 'PRINTCANCELLED');
+                                }
+                            }
+                        );
+                    });
+
+                    // Clean up per-test file from OctoPrint after completion
+                    await OctoPrintControlService.deleteFile(ip, apiKey, fileName);
+                }
+            } catch(err) {
+                console.error("Calibration Stream Error:", err);
+                addLogEntry(`ERROR: Unhandled exception during ${moduleKey} stream dispatch.`, "SYS");
+            }
+        } else {
+            // --- STANDALONE MODE: Inject into local visual simulator ---
+            try {
+                const { GCodeLoader } = await import('../../../gcode/gcode_loader.js');
+                const loader = new GCodeLoader();
+                loader.parse(chunkGcode);
+                const { AppContext } = await import('../../../app_context.js');
+                const printerObj = AppContext.farm.printers.find(p => p.id === activePrinterId);
+                if (printerObj) {
+                    printerObj.standalone.load(loader.moves);
+                    useFleetStore.getState().setPrintCommand('start');
+                }
+            } catch(err) {
+                console.error("Calibration Load Error:", err);
+                addLogEntry(`ERROR: Failed to inject ${moduleKey} routine into simulator.`, "SYS");
+            }
+            // Simulated timing for visual feedback in standalone mode
+            testSuccessResult = await simulateAssetHardwarePolling(moduleKey);
+        }
+
+        currentResults = [...currentResults];
+        currentResults[currentResults.length - 1].status = testSuccessResult ? 'pass' : 'fail';
+        updateCalibrationState({ results: currentResults });
+
+        if (testSuccessResult) {
+            addLogEntry(`SUCCESS: Asset feedback within nominal metrics for [${moduleKey.toUpperCase()}]`, "SYS");
+        } else {
+            addLogEntry(`CRITICAL: Diagnostic anomaly captured on [${moduleKey.toUpperCase()}]`, "SYS");
+        }
+    }
+
+    updateCalibrationState({ isRunning: false, currentStepText: "Routine completed." });
+  };
+
   return (
+    <>
     <aside className={`left-sidebar ${!paneStates.left ? 'collapsed' : ''}`} onClick={() => setOpenContextMenuId(null)}>
       <button className="pane-toggle-btn" id="toggle-left" onClick={() => togglePane('left')}>
         {paneStates.left ? '◀' : '▶'}
@@ -708,40 +858,147 @@ export function FleetSidebar() {
               </div>
             ) : (
               <div id="tab-calib" className="tab-content active" style={{ display: 'block' }}>
-                <div className="calibration-info">
-                  <p>System health check. Verify hardware integrity before production.</p>
+
+                {/* Always-visible description */}
+                <div className="calibration-info" style={{ marginBottom: '10px' }}>
+                  {calibrationState.isRunning || calibrationState.results.length > 0 ? (
+                    <>
+                      <p><span className="anomaly-alert" style={{ color: 'var(--accent-green)', animation: 'none' }}>⚙️ RUNNING DIAGNOSTIC HARDWARE ENGINE</span></p>
+                      <p style={{ fontSize: '10px', color: 'var(--text-dim)', marginTop: '4px' }}>{calibrationState.currentStepText}</p>
+                    </>
+                  ) : (
+                    <p>System health check. Verify hardware integrity before production.</p>
+                  )}
                 </div>
-                <div className="calibration-options">
-                  <label className="check-container select-all">
-                    <input type="checkbox" onChange={(e) => {
-                      document.querySelectorAll('.cal-opt').forEach(cb => cb.checked = e.target.checked);
-                      document.getElementById('cal-time-val').innerText = e.target.checked ? "12m 30s" : "0m";
-                    }} />
-                    <span className="checkmark"></span> SELECT ALL MODULES
-                  </label>
-                  <hr style={{ border: 0, borderTop: '1px solid var(--border)', margin: '10px 0' }} />
-                  <label className="check-container">
-                    <input type="checkbox" className="cal-opt" />
-                    <span className="checkmark"></span> Extrusion Test (E-Steps)
-                  </label>
-                  <label className="check-container">
-                    <input type="checkbox" className="cal-opt" />
-                    <span className="checkmark"></span> Movement (X/Y/Z Squaring)
-                  </label>
-                  <label className="check-container">
-                    <input type="checkbox" className="cal-opt" />
-                    <span className="checkmark"></span> Thermal Stability (PID)
-                  </label>
-                </div>
-                <div className="calib-footer" style={{ marginTop: '20px' }}>
-                  <div className="est-time">Est. Duration: <span id="cal-time-val">0m</span></div>
-                  <button className="action-btn" style={{ width: '100%', marginTop: '10px' }} onClick={() => addLogEntry("SYSTEM: Initiating hardware calibration sequence...", "SYS")}>START TEST</button>
-                </div>
+
+                {calibrationState.isRunning || calibrationState.results.length > 0 ? (
+                  <>
+                    <div className="calibration-steps-list" id="cal-steps-progress">
+                      {calibrationState.results.map((res, i) => (
+                        <div key={i} className={`cal-step-row ${res.status === 'processing' ? 'processing' : res.status === 'pass' ? 'success' : 'failed'}`}>
+                          {res.status === 'processing' && <div className="cal-spinner"></div>}
+                          <span>
+                            {res.status === 'processing' ? `EXECUTING: ${res.name}...` :
+                             res.status === 'pass' ? `✔ ${res.name}: COMPLETE (PASSED)` :
+                             `✘ ${res.name}: HARDWARE VARIANCE CRITICAL`}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                    
+                    {!calibrationState.isRunning && calibrationState.results.some(r => r.status === 'fail') && (
+                        <div className="troubleshooting-guides">
+                            {calibrationState.results.filter(r => r.status === 'fail').map(r => {
+                                const guide = TROUBLESHOOTING_DATA[r.id];
+                                if (!guide) return null;
+                                return (
+                                    <div className="diagnostic-guide-box" key={r.id}>
+                                        <div className="diagnostic-title">⚠️ {guide.title}</div>
+                                        <ul className="diagnostic-steps">
+                                            {guide.steps.map((step, idx) => (
+                                                <li key={idx}>{step}</li>
+                                            ))}
+                                        </ul>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    )}
+
+                    {!calibrationState.isRunning && calibrationState.results.length > 0 && (
+                      <button className="action-btn" style={{ marginTop: '15px', width: '100%' }} onClick={() => updateCalibrationState({ results: [], generatedGcode: '' })}>
+                        FINALIZE & RESET STACK
+                      </button>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <div className="calibration-options">
+                      <label className="check-container select-all">
+                        <input
+                          type="checkbox"
+                          checked={calibrationState.selectedTests.extrusion && calibrationState.selectedTests.movement && calibrationState.selectedTests.thermal}
+                          onChange={(e) => {
+                            const val = e.target.checked;
+                            updateCalibrationState({ selectedTests: { extrusion: val, movement: val, thermal: val } });
+                          }}
+                        />
+                        <span className="checkmark"></span> SELECT ALL MODULES
+                      </label>
+
+                      <hr style={{ border: 0, borderTop: '1px solid var(--border)', margin: '10px 0' }} />
+
+                      <label className="check-container">
+                        <input type="checkbox" className="cal-opt" checked={calibrationState.selectedTests.extrusion} onChange={() => toggleCalibrationTest('extrusion')} />
+                        <span className="checkmark"></span> Extrusion Test (E-Steps)
+                      </label>
+                      <label className="check-container">
+                        <input type="checkbox" className="cal-opt" checked={calibrationState.selectedTests.movement} onChange={() => toggleCalibrationTest('movement')} />
+                        <span className="checkmark"></span> Movement (X/Y/Z Squaring)
+                      </label>
+                      <label className="check-container">
+                        <input type="checkbox" className="cal-opt" checked={calibrationState.selectedTests.thermal} onChange={() => toggleCalibrationTest('thermal')} />
+                        <span className="checkmark"></span> Thermal Stability (PID)
+                      </label>
+                    </div>
+
+                    <button className="secondary-btn" style={{ width: '100%', marginTop: '15px', borderColor: 'var(--accent-green)', color: '#fff' }} onClick={openGCodeModal}>
+                      🔍 INSPECT GENERATED G-CODE
+                    </button>
+
+                    <div className="calib-footer" style={{ marginTop: '20px' }}>
+                      <div className="est-time">
+                        Est. Duration: <span style={{ fontWeight: 'bold', color: 'var(--accent-green)' }}>
+                          {(() => {
+                            let secs = 0;
+                            if (calibrationState.selectedTests.extrusion) secs += 6;
+                            if (calibrationState.selectedTests.movement) secs += 8;
+                            if (calibrationState.selectedTests.thermal) secs += 10;
+                            if (secs === 0) return '0m';
+                            const m = Math.floor(secs / 60);
+                            const s = secs % 60;
+                            return m > 0 ? `${m}m ${s}s` : `${s}s`;
+                          })()}
+                        </span>
+                      </div>
+                      <button
+                        className="action-btn"
+                        style={{ width: '100%', marginTop: '10px' }}
+                        onClick={handleStartCalibration}
+                        disabled={!calibrationState.selectedTests.extrusion && !calibrationState.selectedTests.movement && !calibrationState.selectedTests.thermal}
+                      >
+                        START TEST
+                      </button>
+                    </div>
+                  </>
+                )}
               </div>
             )}
           </div>
         </section>
       )}
     </aside>
+
+    {uiModals.gcodeModal && (
+      <div className="cal-modal-overlay active" id="gcode-modal-overlay" style={{ position: 'fixed', zIndex: 9999 }}>
+        <div className="cal-modal-window">
+            <div className="pane-header">
+                <span>🖨️ COMPILED G-CODE SEQUENCE INSPECTOR</span>
+                <span className="close-x-btn" onClick={closeGCodeModal}>×</span>
+            </div>
+            <div className="cal-modal-body">
+                <div style={{ fontSize: '11px', color: 'var(--text-dim)', marginBottom: '12px' }}>
+                    Reviewing auto-generated toolpath blocks for structural limit collisions before streaming to asset.
+                </div>
+                <pre id="cal-modal-gcode-view">{calibrationState.generatedGcode || "; No modules configured."}</pre>
+                <div style={{ display: 'flex', gap: '10px', marginTop: '20px' }}>
+                    <button className="secondary-btn" style={{ flex: 1 }} onClick={closeGCodeModal}>CLOSE INSPECTOR</button>
+                    <button className="action-btn" style={{ flex: 1 }} onClick={handleStartCalibration}>CONFIRM & RUN TEST</button>
+                </div>
+            </div>
+        </div>
+      </div>
+    )}
+    </>
   );
 }

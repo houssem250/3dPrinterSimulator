@@ -121,209 +121,7 @@ function renderFleet() {
     });
 }
 
-/**
- * --- 3. PRINT CONTROL LOGIC ---
- */
-// function switchToPrintMode(assetId) {
-//     const asset = findAsset(assetId);
-//     if (!asset) return;
-//     activePrintJob.targetAsset = asset;
 
-    // Update Icon Rail styling
-//     const rail = document.querySelector('.icon-rail');
-//     rail.querySelectorAll('.nav-icon').forEach(i => i.classList.remove('active'));
-    
-//     let printIcon = document.getElementById('rail-printer-icon');
-//     if (!printIcon) {
-//         printIcon = document.createElement('div');
-//         printIcon.className = 'nav-icon active';
-//         printIcon.id = 'rail-printer-icon';
-//         printIcon.innerHTML = '⎙'; 
-//         printIcon.onclick = () => switchToPrintMode(assetId);
-//         rail.appendChild(printIcon);
-//     } else {
-//         printIcon.classList.add('active');
-//     }
-
-//     // Transform Sidebar into Control Interface
-//     const pane = document.querySelector('.fleet-manager');
-//     pane.innerHTML = `
-//         <div class="pane-header">
-//             <span>CONTROL: ${asset.name}</span>
-//             <span class="close-x-btn" onclick="exitPrintMode()">×</span>
-//         </div>
-//         <div class="print-control-body">
-//             <!-- Job Status Card -->
-//             <div class="job-status-card">
-//                 <label style="font-size:9px; color:var(--text-dim)">ACTIVE FILE</label>
-//                 <div id="active-filename" style="font-size:12px; margin:5px 0; color:var(--accent-green); font-weight:bold;">${activePrintJob.fileName}</div>
-//                 <div class="progress-bar-container">
-//                     <div id="print-progress-fill" style="height:100%; background:var(--accent-green); width:${activePrintJob.progress}%; transition:width 0.3s;"></div>
-//                 </div>
-//                 <div style="display:flex; justify-content:space-between; font-size:10px;">
-//                     <span id="progress-text">${activePrintJob.progress}%</span>
-//                     <span>Est: --:--</span>
-//                 </div>
-//             </div>
-
-//             <!-- Main Actions -->
-//             <div class="control-grid">
-//                 <button class="action-btn" onclick="startPrint()" id="ctrl-start">START</button>
-//                 <button class="secondary-btn" onclick="pausePrint()">PAUSE</button>
-//                 <button class="secondary-btn" onclick="document.getElementById('file-input').click()">UPLOAD</button>
-//                 <button class="action-btn" onclick="abortPrint()" style="background:var(--accent-red); color:#fff;">ABORT</button>
-//             </div>
-            
-//             <input type="file" id="file-input" style="display:none" onchange="handleFileUpload(event)">
-
-//             <!-- G-Code Analysis Placeholder (New) -->
-//             <div class="file-metadata-pane" id="file-meta-display">
-//                 <div class="meta-row"><span>Total lines:</span> <span id="m-lines">---</span></div>
-//                 <div class="meta-row"><span>Parsed moves:</span> <span id="m-moves">---</span></div>
-//                 <div class="meta-row"><span>Skipped lines:</span> <span id="m-skipped">---</span></div>
-//                 <div class="meta-row"><span>Layers:</span> <span id="m-layers">---</span></div>
-//                 <div class="meta-row"><span>Hotend temp:</span> <span id="m-htemp">---</span></div>
-//                 <div class="meta-row"><span>Bed temp:</span> <span id="m-btemp">---</span></div>
-//                 <div class="meta-row"><span>Est. filament:</span> <span id="m-filament">---</span></div>
-//                 <div class="meta-row"><span>Linear advance:</span> <span id="m-kfactor">---</span></div>
-//             </div>
-
-//             <div class="telemetry-mini">
-//                 <div class="data-row" style="font-size:11px;">
-//                     <span>Status:</span> 
-//                     <span id="op-status" style="color:var(--text-dim)">IDLE</span>
-//                 </div>
-//             </div>
-//         </div>
-//     `;
-// }
-
-// updated function : 
-
-// function switchToPrintMode(assetId) {
-//     const asset = findAsset(assetId);
-//     if (!asset) return;
-//     activePrintJob.targetAsset = asset;
-
-//     const pane = document.querySelector('.fleet-manager');
-//     pane.innerHTML = `
-//         <div class="pane-header">
-//             <span>CONTROL: ${asset.name}</span>
-//             <span class="close-x-btn" onclick="exitPrintMode()">×</span>
-//         </div>
-        
-//         <!-- Tab Navigation -->
-//         <div class="control-tabs">
-//             <div class="tab active" onclick="switchControlTab('print')">PRINTING</div>
-//             <div class="tab" onclick="switchControlTab('calib')">CALIBRATION</div>
-//         </div>
-
-//         <div class="print-control-body">
-//             <!-- PRINT TAB CONTENT -->
-//             <div id="tab-print" class="tab-content active">
-//                 <div class="job-status-card">
-//                     <label style="font-size:9px; color:var(--text-dim)">ACTIVE FILE</label>
-//                     <div id="active-filename" style="font-size:12px; margin:5px 0; color:var(--accent-green); font-weight:bold;">${activePrintJob.fileName}</div>
-//                     <div class="progress-bar-container">
-//                         <div id="print-progress-fill" style="height:100%; background:var(--accent-green); width:${activePrintJob.progress}%;"></div>
-//                     </div>
-//                 </div>
-
-//                  <!-- Main Actions -->
-//                 <div class="control-grid">
-//                     <button class="action-btn" onclick="startPrint()" id="ctrl-start">START</button>
-//                     <button class="secondary-btn" onclick="pausePrint()">PAUSE</button>
-//                     <button class="secondary-btn" onclick="document.getElementById('file-input').click()">UPLOAD</button>
-//                     <button class="action-btn" onclick="abortPrint()" style="background:var(--accent-red); color:#fff;">ABORT</button>
-//                 </div>
-                
-//                 <input type="file" id="file-input" style="display:none" onchange="handleFileUpload(event)">
-
-//                 <!-- G-Code Analysis Placeholder (New) -->
-//                 <div class="file-metadata-pane" id="file-meta-display">
-//                     <div class="meta-row"><span>Total lines:</span> <span id="m-lines">---</span></div>
-//                     <div class="meta-row"><span>Parsed moves:</span> <span id="m-moves">---</span></div>
-//                     <div class="meta-row"><span>Skipped lines:</span> <span id="m-skipped">---</span></div>
-//                     <div class="meta-row"><span>Layers:</span> <span id="m-layers">---</span></div>
-//                     <div class="meta-row"><span>Hotend temp:</span> <span id="m-htemp">---</span></div>
-//                     <div class="meta-row"><span>Bed temp:</span> <span id="m-btemp">---</span></div>
-//                     <div class="meta-row"><span>Est. filament:</span> <span id="m-filament">---</span></div>
-//                     <div class="meta-row"><span>Linear advance:</span> <span id="m-kfactor">---</span></div>
-//                 </div>
-//                 <div class="temp-control-section">
-//                 <div class="temp-section-title">Thermal Management</div>
-
-//                 <!-- 1. Presets -->
-//                 <div class="preset-group">
-//                     <div class="temp-input-wrapper">
-//                         <label>Material Presets</label>
-//                         <select class="industrial-select" id="temp-presets">
-//                             <option value="200,60">PLA (200°C / 60°C)</option>
-//                             <option value="240,100">ABS (240°C / 100°C)</option>
-//                             <option value="230,80">PETG (230°C / 80°C)</option>
-//                             <option value="215,60">TPU (215°C / 60°C)</option>
-//                         </select>
-//                     </div>
-//                     <button class="btn-set" onclick="applyPreset()">SET ALL</button>
-//                 </div>
-
-//                 <!-- 2. Manual Controls -->
-//                 <div class="manual-temp-group">
-//                     <div class="temp-input-wrapper">
-//                         <label>Nozzle (°C)</label>
-//                         <input type="number" class="industrial-input" id="manual-nozzle" placeholder="200">
-//                     </div>
-//                     <button class="btn-set" onclick="setTemp('nozzle')">SET</button>
-//                 </div>
-
-//                 <div class="manual-temp-group">
-//                     <div class="temp-input-wrapper">
-//                         <label>Bed (°C)</label>
-//                         <input type="number" class="industrial-input" id="manual-bed" placeholder="60">
-//                     </div>
-//                     <button class="btn-set" onclick="setTemp('bed')">SET</button>
-//                 </div>
-//             </div>
-
-//             <!-- CALIBRATION TAB CONTENT -->
-//             <div id="tab-calib" class="tab-content">
-//                 <div class="calibration-info">
-//                     <p>System health check. Select modules to verify hardware integrity before production.</p>
-//                 </div>
-
-//                 <div class="calibration-options">
-//                     <label class="check-container select-all">
-//                         <input type="checkbox" id="cal-all" onchange="toggleAllCalib(this)">
-//                         <span class="checkmark"></span> SELECT ALL MODULES
-//                     </label>
-//                     <hr style="border:0; border-top:1px solid var(--border); margin:10px 0;">
-//                     <label class="check-container">
-//                         <input type="checkbox" class="cal-opt" value="extrusion">
-//                         <span class="checkmark"></span> Extrusion Test (E-Steps)
-//                     </label>
-//                     <label class="check-container">
-//                         <input type="checkbox" class="cal-opt" value="movement">
-//                         <span class="checkmark"></span> Movement (X/Y/Z Squaring)
-//                     </label>
-//                     <label class="check-container">
-//                         <input type="checkbox" class="cal-opt" value="temp">
-//                         <span class="checkmark"></span> Thermal Stability (PID)
-//                     </label>
-//                 </div>
-
-//                 <div class="calib-footer">
-//                     <div class="est-time">Est. Test Duration: <span id="cal-time">0m</span></div>
-//                     <button class="secondary-btn" style="width:100%; margin: 10px 0;">PREVIEW CALIB G-CODE</button>
-//                     <div class="control-grid" style="margin-top:0">
-//                         <button class="action-btn" onclick="runCalibration()">START TEST</button>
-//                         <button class="action-btn" style="background:var(--accent-red);" onclick="abortPrint()">ABORT</button>
-//                     </div>
-//                 </div>
-//             </div>
-//         </div>
-//         <input type="file" id="file-input" style="display:none" onchange="handleFileUpload(event)">
-//     `;
-// }
 function switchToPrintMode(assetId) {
     const asset = findAsset(assetId);
     if (!asset) return;
@@ -432,6 +230,13 @@ function switchToPrintMode(assetId) {
                         <span class="checkmark"></span> Thermal Stability (PID)
                     </label>
                 </div>
+                <button class="secondary-btn" style="width:100%;
+                    margin-top:15px;
+                    border-color: var(--accent-green);
+                    color: #fff;
+                    " onclick="openGCodeModal()">
+                    🔍 INSPECT GENERATED G-CODE
+                </button>
 
                 <div class="calib-footer" style="margin-top:20px;">
                     <div class="est-time">Est. Duration: <span id="cal-time">0m</span></div>
@@ -440,6 +245,9 @@ function switchToPrintMode(assetId) {
             </div>
         </div>
     `;
+
+    // Add this binding activation hook execution at the absolute end of the function:
+    rebindCalibEventObserverListeners();
 }
 // tab logic for printing pane : 
 
@@ -489,10 +297,320 @@ function toggleAllCalib(source) {
     document.getElementById('cal-time').innerText = source.checked ? "12m 30s" : "0m";
 }
 
-function runCalibration() {
-    logToTerminal("SYSTEM: Initiating hardware calibration sequence...");
-    // Future: Add notification logic here
+// ==========================================
+// 🛠️ CALIBRATION ENGINE SYSTEM SIMULATOR 
+// ==========================================
+
+// Fixed runtimes for our UI time estimation calculations (in seconds)
+const CAL_TEST_DURATIONS = {
+    extrusion: 6, 
+    movement: 8,
+    temp: 10
+};
+
+// Pure client-side dynamic G-code module generators
+const CalibGCodeScripts = {
+    getHeader: (asset) => [
+        `; --- AUTOMATED SYSTEM VERIFICATION ROUTINE ---`,
+        `; TARGET_ASSET: ${asset.name}`,
+        `; COMPILED_ON: ${new Date().toLocaleTimeString()}`,
+        `G90 ; Set Absolute Positioning`,
+        `M83 ; Set Extruder to Relative mode`,
+        `G28 ; Home All Structural Axes`,
+        `; ---------------------------------------------\n`
+    ],
+    extrusion: () => [
+        `; --- MODULE: EXTRUSION INTEGRITY (E-STEPS) ---`,
+        `M109 S210 ; Heat Nozzle to nominal validation target`,
+        `G1 Z10 F3000 ; Clear build surface bed`,
+        `G1 X20 Y20 F6000 ; Move to isolation corner`,
+        `G1 E50 F120 ; Feed exactly 50mm calibration filament`,
+        `G4 P1000 ; Dwell check loop`,
+        `; ---------------------------------------------\n`
+    ],
+    movement: () => [
+        `; --- MODULE: KINETIC TRAVEL SQUARE (BACKLASH) ---`,
+        `G1 Z25 F2000 ; Lift Z-Axis tool head`,
+        `G1 X10 Y10 F8000 ; Vector Origin Sweep`,
+        `G1 X200 Y10 F10000 ; Dynamic Travel Check X`,
+        `G1 X200 Y200 F10000 ; Travel Check corner Y`,
+        `G1 X10 Y200 F10000 ; Returning Frame Alignment`,
+        `G1 X10 Y10 F8000 ; Close tracking loop`,
+        `; ---------------------------------------------\n`
+    ],
+    temp: () => [
+        `; --- MODULE: THERMAL STABILITY SIMULATION (PID) ---`,
+        `M140 S60 ; Set target platform environment`,
+        `M106 S255 ; Enable full parts fan load override`,
+        `M104 S220 ; Step up core thermal limits`,
+        `G4 P3000 ; Verify sensor frequency variance tracking`,
+        `M106 S0 ; Kill fans`,
+        `; ---------------------------------------------\n`
+    ]
+};
+
+/**
+ * Recalculates total operation time and prints compiled G-Code preview 
+ * directly into your floating terminal layout panel.
+ */
+// function updateCalibrationPreview() {
+//     const asset = activePrintJob.targetAsset || { name: "Mach 01 - 3D Printer" };
+    
+//     // Grab selected check items
+//     const selectedModules = Array.from(document.querySelectorAll('.cal-opt:checked')).map(el => el.value);
+    
+//     // 1. Dynamic Duration Update
+//     let totalSeconds = selectedModules.reduce((acc, curr) => acc + CAL_TEST_DURATIONS[curr], 0);
+//     const durationElement = document.getElementById('cal-time');
+//     if (durationElement) {
+//         durationElement.innerText = totalSeconds > 0 ? `${totalSeconds}s` : '0m';
+//     }
+
+//     // 2. Generate and stream lines straight into your beautiful G-Code Terminal Panel
+//     const terminalBody = document.querySelector('.terminal-body || #gcode-console-lines'); 
+//     const terminalContainer = document.getElementById('gcode-terminal'); // Matches index.html id
+
+//     if (selectedModules.length === 0) {
+//         if (terminalContainer) appendTerminalLine("SYSTEM: Calibration stack empty. Standing by.", "system");
+//         return;
+//     }
+
+//     // Assemble text lines payload array
+//     let scriptArray = [...CalibGCodeScripts.getHeader(asset)];
+//     selectedModules.forEach(mod => {
+//         if (CalibGCodeScripts[mod]) scriptArray = scriptArray.concat(CalibGCodeScripts[mod]());
+//     });
+//     scriptArray.push("M84 ; Disable structural holding steppers");
+//     scriptArray.push("; --- ROUTINE COMPILE END ---");
+
+//     // Push execution warning alert lines right into your terminal box window
+//     if (terminalContainer) {
+//         appendTerminalLine(`SYSTEM: Regenerated custom Calibration G-Code payload (${scriptArray.length} lines compiled)...`, "system");
+//     }
+// }
+
+
+/**
+ * Recalculates total operation time and prints compiled G-Code preview 
+ * directly into the inline preview box and the floating terminal panel.
+ */
+function updateCalibrationPreview() {
+    const asset = activePrintJob.targetAsset || { name: "Mach 01 - 3D Printer" };
+    
+    // Grab selected check items
+    const selectedModules = Array.from(document.querySelectorAll('.cal-opt:checked')).map(el => el.value);
+    
+    // 1. Dynamic Duration Update
+    let totalSeconds = selectedModules.reduce((acc, curr) => acc + CAL_TEST_DURATIONS[curr], 0);
+    const durationElement = document.getElementById('cal-time');
+    if (durationElement) {
+        durationElement.innerText = totalSeconds > 0 ? `${totalSeconds}s` : '0m';
+    }
+
+    const previewElement = document.getElementById('cal-gcode-preview');
+    if (!previewElement) return;
+
+    if (selectedModules.length === 0) {
+        previewElement.innerText = "; Select modules above to compile script...";
+        return;
+    }
+
+    // Assemble text lines payload array
+    let scriptArray = [...CalibGCodeScripts.getHeader(asset)];
+    selectedModules.forEach(mod => {
+        if (CalibGCodeScripts[mod]) scriptArray = scriptArray.concat(CalibGCodeScripts[mod]());
+    });
+    scriptArray.push("M84 ; Disable structural holding steppers");
+    scriptArray.push("; --- ROUTINE COMPILE END ---");
+
+    // 2. Output compiled payload lines right into the inline layout panel display
+    previewElement.innerText = scriptArray.join('\n');
+    
+    // Scroll the preview back to top when it changes
+    previewElement.scrollTop = 0;
+
+    // 3. Mirror the compilation warning update directly to the floating console window log
+    appendTerminalLine(`SYSTEM: Regenerated custom Calibration G-Code payload (${scriptArray.length} lines compiled)...`, "system");
 }
+
+/**
+ * Handles checkbox check-all utility mechanics
+ */
+function toggleAllCalib(masterCheckbox) {
+    const checkboxes = document.querySelectorAll('.cal-opt');
+    checkboxes.forEach(cb => {
+        cb.checked = masterCheckbox.checked;
+    });
+    updateCalibrationPreview();
+}
+
+/**
+ * Core Step-by-Step Task State Loop Engine
+ */
+async function runCalibration() {
+    const selectedModules = Array.from(document.querySelectorAll('.cal-opt:checked')).map(el => el.value);
+    if (selectedModules.length === 0) {
+        alert("Please select at least one module routine to initiate testing.");
+        return;
+    }
+
+    const calibTabContainer = document.getElementById('tab-calib');
+    if (!calibTabContainer) return;
+
+    // Cache current setup to restore on completion
+    const originalContentMarkup = calibTabContainer.innerHTML;
+
+    // 1. Wipe layout display card and draw processing list box
+    calibTabContainer.innerHTML = `
+        <div class="calibration-info" style="margin-bottom: 10px;">
+            <p><span class="anomaly-alert" style="color:var(--accent-green); animation: none;">⚙️ RUNNING DIAGNOSTIC HARDWARE ENGINE</span></p>
+            <p style="font-size:10px; color:var(--text-dim); margin-top:4px;">Streaming instructions to asset microcontroller logs...</p>
+        </div>
+        <div class="calibration-steps-list" id="cal-steps-progress"></div>
+    `;
+
+    const progressListElement = document.getElementById('cal-steps-progress');
+
+    // 2. Linear Array Execution State Iterator 
+    for (let i = 0; i < selectedModules.length; i++) {
+        const moduleKey = selectedModules[i];
+        const stepElementId = `step-row-${moduleKey}`;
+        const moduleTitleReadable = getModuleReadableName(moduleKey);
+
+        // Append active processing line-row item block layout
+        progressListElement.innerHTML += `
+            <div class="cal-step-row processing" id="${stepElementId}">
+                <div class="cal-spinner"></div>
+                <span>EXECUTING: ${moduleTitleReadable}...</span>
+            </div>
+        `;
+        progressListElement.scrollTop = progressListElement.scrollHeight;
+
+        // Stream alerts to your floating terminal console logs!
+        appendTerminalLine(`EXEC: Initializing hardware test routine [${moduleKey.toUpperCase()}]`, "command");
+
+        // Simulate physical async hardware delay intervals
+        const testSuccessResult = await simulateAssetHardwarePolling(moduleKey);
+
+        // Handle active row resolution state
+        const targetRowNode = document.getElementById(stepElementId);
+        if (targetRowNode) {
+            targetRowNode.classList.remove('processing');
+            if (testSuccessResult) {
+                targetRowNode.classList.add('success');
+                targetRowNode.innerHTML = `<span>✔ ${moduleTitleReadable}: COMPLETE (PASSED)</span>`;
+                appendTerminalLine(`SUCCESS: Asset feedback within nominal metrics for [${moduleKey.toUpperCase()}]`, "system");
+                
+                // Add an awesome custom tracking log directly into your timeline system!
+                addTimelineLog(`Calib Passed: ${moduleTitleReadable}`, "MQTT Stream Mode");
+            } else {
+                targetRowNode.classList.add('failed');
+                targetRowNode.innerHTML = `<span>✘ ${moduleTitleReadable}: HARDWARE VARIANCE CRITICAL</span>`;
+                appendTerminalLine(`CRITICAL: Diagnostic anomaly captured on [${moduleKey.toUpperCase()}]`, "error");
+                addTimelineLog(`Calib Fault: ${moduleTitleReadable} failure detected`, "Alert Event");
+            }
+        }
+    }
+
+    // 3. Complete and inject back interface anchor restore button
+    progressListElement.innerHTML += `
+        <button class="action-btn" style="margin-top:15px; width:100%" id="btn-restore-cal">FINALIZE & RESET STACK</button>
+    `;
+
+    document.getElementById('btn-restore-cal').addEventListener('click', () => {
+        calibTabContainer.innerHTML = originalContentMarkup;
+        // Re-attach setup update hook observers onto checkboxes
+        rebindCalibEventObserverListeners();
+    });
+}
+
+// Simple text translator lookup helper
+function getModuleReadableName(key) {
+    const names = {
+        extrusion: "Extrusion Feed (E-Steps)",
+        movement: "Kinetic Frame Travel (X/Y/Z)",
+        temp: "Thermal Stability Loop (PID)"
+    };
+    return names[key] || "Unknown Diagnostic";
+}
+
+// Simulates real machine telemetry window loops (90% success window rate)
+function simulateAssetHardwarePolling(moduleKey) {
+    const totalSimWaitMs = CAL_TEST_DURATIONS[moduleKey] * 350; // Accelerated scale time for responsive simulation tracking
+    return new Promise((resolve) => {
+        setTimeout(() => {
+            const outcomeResult = Math.random() > 0.15; // 85% chance of metric confirmation passing
+            resolve(outcomeResult);
+        }, totalSimWaitMs);
+    });
+}
+
+// Utility pipeline helper to inject elements right into your G-Code panel console box safely
+function appendTerminalLine(text, type = "system") {
+    // Attempting to match your floating terminal layout body references
+    const terminalLinesBox = document.querySelector('#gcode-terminal div[style*="overflow-y"]') || 
+                             document.querySelector('.terminal-body') ||
+                             document.getElementById('gcode-terminal');
+                             
+    if (terminalLinesBox) {
+        const timeStr = `[${new Date().toLocaleTimeString()}]`;
+        let color = "var(--accent-green)";
+        if (type === "error") color = "var(--accent-red)";
+        if (type === "command") color = "#00f3ff";
+        
+        const lineNode = document.createElement('div');
+        lineNode.style.fontSize = "11px";
+        lineNode.style.fontFamily = "monospace";
+        lineNode.style.marginBottom = "4px";
+        lineNode.style.color = color;
+        lineNode.innerHTML = `<span style="color:var(--text-dim)">${timeStr}</span> ${text}`;
+        
+        terminalLinesBox.appendChild(lineNode);
+        terminalLinesBox.scrollTop = terminalLinesBox.scrollHeight;
+    }
+}
+
+// Helper to push milestones onto your beautiful horizontal bottom timeline rail dynamically
+function addTimelineLog(message, statusText = "Standalone Mode") {
+    const timelineContainer = document.querySelector('.timeline-wrapper div[style*="display: flex"]') || 
+                              document.querySelector('.timeline-wrapper') || 
+                              document.querySelector('.canvas-viewport ~ div[style*="position: absolute"]');
+                              
+    if (timelineContainer && timelineContainer.className.includes('timeline') === false) {
+        // Find inside container the main wrapper flex row node
+        const flexRow = timelineContainer.querySelector('div') || timelineContainer;
+        const totalNodes = flexRow.querySelectorAll('div[style*="flex: 1"]').length || 4;
+        
+        const newMileNode = document.createElement('div');
+        newMileNode.style.flex = "1";
+        newMileNode.style.textAlign = "center";
+        newMileNode.style.position = "relative";
+        newMileNode.innerHTML = `
+            <div style="width:10px; height:10px; background:var(--accent-green); border-radius:50%; margin:0 auto 8px auto; border:2px solid #000; box-shadow:0 0 8px var(--accent-green)"></div>
+            <div style="font-size:9px; color:var(--text-dim); margin-bottom:2px;">${new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
+            <div style="font-size:10px; font-weight:bold; color:#fff">${message}</div>
+        `;
+        // Inject cleanly into flow index window 
+        if(flexRow.appendChild) flexRow.appendChild(newMileNode);
+    }
+}
+
+// Rebind change observation triggers whenever interface template strings regenerate
+function rebindCalibEventObserverListeners() {
+    const opts = document.querySelectorAll('.cal-opt');
+    opts.forEach(opt => {
+        opt.addEventListener('change', updateCalibrationPreview);
+    });
+    
+    const masterAll = document.getElementById('cal-all');
+    if (masterAll) {
+        masterAll.addEventListener('change', (e) => {
+            toggleAllCalib(e.target);
+        });
+    }
+}
+//////////////////////////////////////////
+
 
 function handleFileUpload(e) {
     const file = e.target.files[0];
@@ -886,73 +1004,6 @@ document.getElementById('wizard-close').onclick = () => assetWizard.style.displa
 
 
 
-// // timeline test code : 
-// const horizontalEvents = [
-//     { time: "08:00", desc: "System Warmup", status: "completed" },
-//     { time: "08:15", desc: "Auto-Leveling", status: "completed" },
-//     { time: "08:20", desc: "Print Started", status: "completed" },
-//     { time: "09:45", desc: "Extruder Check", status: "current" },
-//     { time: "---", desc: "Planned Finish", status: "pending" }
-// ];
-
-// function renderHorizontalTimeline() {
-//     const container = document.getElementById('event-timeline-h');
-//     container.innerHTML = horizontalEvents.map(event => `
-//         <div class="event-point-h ${event.status}">
-//             <div class="dot-h"></div>
-//             <div class="time-h">${event.time}</div>
-//             <div class="desc-h">${event.desc}</div>
-//         </div>
-//     `).join('');
-// }
-
-
-// // Function to add a new event to the log
-// function addLogEntry(description, type = "completed") {
-//     const now = new Date();
-//     const timestamp = `${now.getHours()}:${now.getMinutes().toString().padStart(2, '0')}`;
-    
-//     // Set previous "current" events to "completed"
-//     timelineData.forEach(e => { if(e.status === 'current') e.status = 'completed'; });
-    
-//     timelineData.push({ time: timestamp, desc: description, status: type });
-//     renderTimeline();
-// }
-
-// // Initialize on load
-// renderHorizontalTimeline();
-
-// function applyPreset() {
-//     const [nozzle, bed] = document.getElementById('temp-presets').value.split(',');
-//     document.getElementById('manual-nozzle').value = nozzle;
-//     document.getElementById('manual-bed').value = bed;
-    
-//     // Log to Timeline
-//     addLogEntry(`Thermal Preset Applied: ${nozzle}°C / ${bed}°C`);
-    
-//     // Simulate G-Code terminal output
-//     console.log(`M104 S${nozzle}; M140 S${bed};`);
-//     updateTerminal(`Sending: M104 S${nozzle} (Nozzle)`);
-//     updateTerminal(`Sending: M140 S${bed} (Bed)`);
-// }
-
-// function setTemp(type) {
-//     const val = document.getElementById(`manual-${type}`).value;
-//     if(!val) return;
-    
-//     addLogEntry(`Manual ${type} target set to ${val}°C`);
-//     updateTerminal(`Sending: ${type === 'nozzle' ? 'M104' : 'M140'} S${val}`);
-// }
-
-// // Helper to push text to your G-Code terminal
-// function updateTerminal(msg) {
-//     const term = document.getElementById('terminal-output');
-//     if(term) {
-//         term.innerHTML += `\n<span style="color:var(--text-dim)">[SYS]</span> ${msg}`;
-//         term.scrollTop = term.scrollHeight;
-//     }
-// }
-
 /* --- 1. DATA & INITIALIZATION --- */
 
 // Consolidated into one array for the horizontal timeline
@@ -967,6 +1018,7 @@ const horizontalEvents = [
 // Run on page load
 document.addEventListener('DOMContentLoaded', () => {
     renderHorizontalTimeline();
+    PrintAnomalyEngine.init();
 });
 
 /* --- 2. TIMELINE ENGINE --- */
@@ -1053,43 +1105,6 @@ function updateTerminal(msg) {
     }
 }
 
-/// toggle logic : 
-
-
-// function togglePane(side) {
-//     let selector;
-//     let btnId;
-//     let openIcon, closeIcon;
-
-//     switch(side) {
-//         case 'left':
-//             selector = '.left-sidebar';
-//             btnId = 'toggle-left';
-//             openIcon = '◀'; closeIcon = '▶';
-//             break;
-//         case 'right':
-//             selector = '.right-rail';
-//             btnId = 'toggle-right';
-//             openIcon = '▶'; closeIcon = '◀';
-//             break;
-//         case 'bottom':
-//             selector = '.timeline-wrapper';
-//             btnId = 'toggle-bottom';
-//             openIcon = '▼'; closeIcon = '▲';
-//             break;
-//     }
-
-//     const pane = document.querySelector(selector);
-//     const btn = document.getElementById(btnId);
-    
-//     pane.classList.toggle('collapsed');
-    
-//     // Switch arrow icons
-//     if (btn) {
-//         btn.innerText = pane.classList.contains('collapsed') ? closeIcon : openIcon;
-//     }
-// }
-
 function togglePane(side) {
     const paneMap = {
         'left': { selector: '.left-sidebar', btn: 'toggle-left', icons: ['◀', '▶'] },
@@ -1131,4 +1146,308 @@ function updateTimelineLayout() {
         timeline.style.marginRight = "0px";
         floatingPane.style.marginLeft = "0px";
     }
+}
+
+
+// ========================================================
+// 🛠️ PREDICTIVE DIAGNOSTICS & MODAL UI SYSTEM EXTENSIONS
+// ========================================================
+
+// Knowledge database containing specific calibration resolution parameters
+const TROUBLESHOOTING_GUIDES = {
+    extrusion: `
+        <div class="diagnostic-guide-box">
+            <div class="diagnostic-title">⚠️ EXTRUSION FAULT RESOLUTION PATH</div>
+            <ul class="diagnostic-steps">
+                <li>Check for physical <strong>nozzle clogging</strong> or composite material crystal build-up.</li>
+                <li>Verify tensioning arm on filament <strong>extruder gears</strong> is not slipping.</li>
+                <li>Measure hotend diameter entry using physical calipers to adjust volumetric flow multiplier ($M221$).</li>
+            </ul>
+        </div>
+    `,
+    movement: `
+        <div class="diagnostic-guide-box">
+            <div class="diagnostic-title">⚠️ STRUCTURAL GEOMETRY RESOLUTION PATH</div>
+            <ul class="diagnostic-steps">
+                <li>Inspect mechanical drive <strong>X/Y axis belts</strong> for slack or missing teeth.</li>
+                <li>Manually align dual lead-screw columns to correct <strong>Z-axis gantry sagging</strong>.</li>
+                <li>Tighten eccentric v-slot guide wheels to remove frame play and coordinate backlash.</li>
+            </ul>
+        </div>
+    `,
+    temp: `
+        <div class="diagnostic-guide-box">
+            <div class="diagnostic-title">⚠️ THERMAL STABILITY RESOLUTION PATH</div>
+            <ul class="diagnostic-steps">
+                <li>Verify <strong>thermistor wiring harness</strong> component is securely seated in heater block.</li>
+                <li>Confirm silicone heat-block protection sock insulation shield is present.</li>
+                <li>Run a full manual command-line PID autotune routine ($M303\ E0\ S210\ C8$) via terminal console.</li>
+            </ul>
+        </div>
+    `
+};
+
+// Modal Control Operations
+function openGCodeModal() {
+    const selectedModules = Array.from(document.querySelectorAll('.cal-opt:checked')).map(el => el.value);
+    if(selectedModules.length === 0) {
+        alert("Select at least one module step sequence to compile a preview.");
+        return;
+    }
+    
+    // Compile and push current script content into modal pre box viewport elements
+    const asset = activePrintJob.targetAsset || { name: "Mach 01 - 3D Printer" };
+    let scriptArray = [...CalibGCodeScripts.getHeader(asset)];
+    selectedModules.forEach(mod => {
+        if (CalibGCodeScripts[mod]) scriptArray = scriptArray.concat(CalibGCodeScripts[mod]());
+    });
+    scriptArray.push("M84 ; Disable structural holding steppers");
+    
+    document.getElementById('cal-modal-gcode-view').innerText = scriptArray.join('\n');
+    document.getElementById('gcode-modal-overlay').classList.add('active');
+}
+
+function closeGCodeModal() {
+    document.getElementById('gcode-modal-overlay').classList.remove('active');
+}
+
+/**
+ * Enhanced Step-by-Step Task Loop containing fault resolution routing modules
+ */
+async function runCalibration() {
+    const selectedModules = Array.from(document.querySelectorAll('.cal-opt:checked')).map(el => el.value);
+    if (selectedModules.length === 0) return alert("Select module variables to run.");
+
+    const calibTabContainer = document.getElementById('tab-calib');
+    if (!calibTabContainer) return;
+
+    const originalContentMarkup = calibTabContainer.innerHTML;
+
+    // 1. Swap content canvas elements for active feedback monitors
+    calibTabContainer.innerHTML = `
+        <div class="calibration-info" style="margin-bottom: 10px;">
+            <p><span class="anomaly-alert" style="color:var(--accent-green); animation: none;">⚙️ RUNNING LIVE TELEMETRY STACK</span></p>
+        </div>
+        <div class="calibration-steps-list" id="cal-steps-progress"></div>
+        <div id="cal-diagnostic-solutions" style="margin-top:10px;"></div>
+    `;
+
+    const progressListElement = document.getElementById('cal-steps-progress');
+    const solutionDisplayElement = document.getElementById('cal-diagnostic-solutions');
+    
+    let failureTrackerList = [];
+
+    // 2. Linear Flow Controller Step State Machine Loop
+    for (let i = 0; i < selectedModules.length; i++) {
+        const moduleKey = selectedModules[i];
+        const stepElementId = `step-row-${moduleKey}`;
+        const moduleTitleReadable = getModuleReadableName(moduleKey);
+
+        progressListElement.innerHTML += `
+            <div class="cal-step-row processing" id="${stepElementId}">
+                <div class="cal-spinner"></div>
+                <span>TESTING: ${moduleTitleReadable}...</span>
+            </div>
+        `;
+        progressListElement.scrollTop = progressListElement.scrollHeight;
+
+        appendTerminalLine(`EXEC: Streaming test toolpath block [${moduleKey.toUpperCase()}]`, "command");
+
+        // Execute async mock interval cycle execution 
+        const testSuccessResult = await simulateAssetHardwarePolling(moduleKey);
+
+        const targetRowNode = document.getElementById(stepElementId);
+        if (targetRowNode) {
+            targetRowNode.classList.remove('processing');
+            if (testSuccessResult) {
+                targetRowNode.classList.add('success');
+                targetRowNode.innerHTML = `<span>✔ ${moduleTitleReadable}: PASSED</span>`;
+                appendTerminalLine(`SUCCESS: Metric validation complete for [${moduleKey.toUpperCase()}]`, "system");
+                addTimelineLog(`Passed: ${moduleTitleReadable}`, "MQTT Stream Mode");
+            } else {
+                targetRowNode.classList.add('failed');
+                targetRowNode.innerHTML = `<span>✘ ${moduleTitleReadable}: ERROR LIMIT EXCEEDED</span>`;
+                appendTerminalLine(`CRITICAL: Diagnostic threshold variance on [${moduleKey.toUpperCase()}]`, "error");
+                addTimelineLog(`Fault: ${moduleTitleReadable} limits breached`, "Alert Event");
+                
+                // Track item failure profile key references
+                failureTrackerList.push(moduleKey);
+            }
+        }
+    }
+
+    // 3. Post-execution evaluation checklist analyzer layer loop
+    if(failureTrackerList.length > 0) {
+        solutionDisplayElement.innerHTML = `
+            <div style="font-size:10px; text-transform:uppercase; color:var(--accent-red); margin:15px 0 5px 0; font-weight:bold;">
+                📋 System Hardware Repair Directives:
+            </div>
+        `;
+        // Inject custom step cards one by one from dictionary references
+        failureTrackerList.forEach(failedKey => {
+            if(TROUBLESHOOTING_GUIDES[failedKey]) {
+                solutionDisplayElement.innerHTML += TROUBLESHOOTING_GUIDES[failedKey];
+            }
+        });
+    } else {
+        solutionDisplayElement.innerHTML = `
+            <div class="cal-step-row success" style="margin-top: 15px; text-align: center; justify-content: center;">
+                <span>🎉 FLEET HEALTH NOMINAL — READY FOR DEPLOYMENT</span>
+            </div>
+        `;
+    }
+
+    // Append interface restore operational handler keys
+    solutionDisplayElement.innerHTML += `
+        <button class="action-btn" style="margin-top:15px; width:100%" id="btn-restore-cal">COMPLETE ROUTINE & RESET STACK</button>
+    `;
+
+    document.getElementById('btn-restore-cal').addEventListener('click', () => {
+        calibTabContainer.innerHTML = originalContentMarkup;
+        rebindCalibEventObserverListeners();
+    });
+}
+
+// ==========================================
+// 🚨 GLOBAL TELEMETRY ANOMALY SYSTEM ENGINE
+// ==========================================
+
+// 1. Data Store for Simulated Anomaly Events
+const TelemetryAnomalyDatabase = {
+    info: [
+        {
+            priority: "info",
+            message: "PID Loop Controller captured ambient cooling shift. Adjusting duty cycle dynamically.",
+            actionHint: "Inspect thermal baseline stats"
+        },
+        {
+            priority: "info",
+            message: "Volumetric compensation activated. Material flow adjusted (+0.5%) due to spool drag.",
+            actionHint: "Review flow parameters"
+        }
+    ],
+    warning: [
+        {
+            priority: "warning",
+            message: "Micro-slip detected on X-Axis stepper drive motor. Belt resistance trending higher.",
+            actionHint: "Deploy kinetic calibration routine"
+        },
+        {
+            priority: "warning",
+            message: "Nozzle backpressure approaching safety limit (+6.4%). Possible structural partial clog forming.",
+            actionHint: "Schedule hotend purge cycle"
+        }
+    ],
+    critical: [
+        {
+            priority: "critical",
+            message: "CRITICAL: Drive-belt resonant vibration spike caught (>120Hz). Structural layer shift imminent.",
+            actionHint: "Deploy kinetic calibration routine"
+        },
+        {
+            priority: "critical",
+            message: "CRITICAL: Thermal runaway safety boundary constraint warning on heater element.",
+            actionHint: "Emergency stop control terminal"
+        }
+    ]
+};
+
+// 2. Main Engine Core Object (Declared Globally)
+const PrintAnomalyEngine = {
+    containerId: 'alert-feed-container',
+
+    /**
+     * Resets and clears the log feed container layout
+     */
+    init() {
+        const container = document.getElementById(this.containerId);
+        if (!container) return;
+        container.innerHTML = `
+            <div style="font-size:10px; color:var(--text-dim); text-align:center; padding:20px 0;" id="empty-alert-msg">
+                📡 Monitoring live asset telemetry streams...
+            </div>
+        `;
+    },
+
+    /**
+     * Renders an anomaly telemetry notification card directly into the UI
+     */
+    pushAnomaly(anomaly) {
+        const container = document.getElementById(this.containerId);
+        if (!container) return;
+
+        // Strip initial placeholder text if it's there
+        const emptyMsg = document.getElementById('empty-alert-msg');
+        if (emptyMsg) emptyMsg.remove();
+
+        const timeStampStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        const uniqueId = 'anom_' + Math.random().toString(36).substr(2, 9);
+
+        const alertCardNode = document.createElement('div');
+        // Add the custom critical-pulse class we defined in style.css for high priority anomalies
+        alertCardNode.className = `alert-item ${anomaly.priority === 'critical' ? 'critical-pulse' : ''}`;
+        alertCardNode.id = uniqueId;
+
+        alertCardNode.innerHTML = `
+            <div class="alert-item-header">
+                <span class="alert-badge ${anomaly.priority}">${anomaly.priority}</span>
+                <span class="alert-time">${timeStampStr}</span>
+            </div>
+            <div class="alert-msg">${anomaly.message}</div>
+            ${anomaly.actionHint ? `<div class="alert-action-hint" onclick="PrintAnomalyEngine.executeRemediationPath('${anomaly.actionHint}', '${anomaly.priority}')">🔧 ${anomaly.actionHint}</div>` : ''}
+        `;
+
+        // Insert at the top so the newest alert is always visible
+        container.insertBefore(alertCardNode, container.firstChild);
+        
+        // Output clean color-coded updates directly to your terminal console box
+        const logType = anomaly.priority === 'critical' ? 'error' : 'system';
+        if (typeof appendTerminalLine === 'function') {
+            appendTerminalLine(`TELEMETRY_[${anomaly.priority.toUpperCase()}]: ${anomaly.message}`, logType);
+        }
+        
+        // Pin an execution milestone dot straight onto your bottom timeline rail
+        if (typeof addTimelineLog === 'function') {
+            addTimelineLog(`Anomaly: ${anomaly.priority.toUpperCase()}`, "Sensor Intercept");
+        }
+    },
+
+    /**
+     * Automated remediation routing paths
+     */
+    executeRemediationPath(actionText, severity) {
+        if (typeof appendTerminalLine === 'function') {
+            appendTerminalLine(`REMEDIATION_DISPATCH: Initializing diagnostic pathway for action -> [${actionText.toUpperCase()}]`, "command");
+        }
+        
+        if (actionText.toLowerCase().includes("emergency") || severity === "critical") {
+            if (typeof appendTerminalLine === 'function') {
+                appendTerminalLine("HALT: Transmission kill sequence triggered by technician request.", "error");
+            }
+            // Mechanically hit your stop button if it exists
+            const stopBtn = document.querySelector('.control-btn.red') || document.querySelector('button[onclick*="stop"]');
+            if (stopBtn) stopBtn.click();
+        } else {
+            // Direct workflow route change onto your calibration tab
+            const currentAssetId = (typeof activePrintJob !== 'undefined' && activePrintJob.targetAsset) ? activePrintJob.targetAsset.id : "PRINTER_01";
+            if (typeof switchToPrintMode === 'function') switchToPrintMode(currentAssetId);
+            if (typeof switchControlTab === 'function') switchControlTab('calib');
+        }
+    }
+};
+
+/**
+ * 🕹️ THE EXPLICIT MANUAL TRIGGER BUTTON HANDLER
+ * This matches your index.html onclick="triggerManualAnomaly('severity')" calls perfectly.
+ */
+function triggerManualAnomaly(severity) {
+    const selectedPool = TelemetryAnomalyDatabase[severity];
+    if (!selectedPool) return;
+
+    // Grab a random distinct tracking event from the selected severity pool bucket
+    const randomIndex = Math.floor(Math.random() * selectedPool.length);
+    const chosenAnomaly = selectedPool[randomIndex];
+
+    // Fire it safely directly into our engine object
+    PrintAnomalyEngine.pushAnomaly(chosenAnomaly);
 }

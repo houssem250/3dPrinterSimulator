@@ -45,6 +45,26 @@
                     </div>
                 </div>
             </div>
+            <!--  -->
+            <div class="cal-modal-overlay" id="gcode-modal-overlay">
+                <div class="cal-modal-window">
+                    <div class="pane-header">
+                        <span>🖨️ COMPILED G-CODE SEQUENCE INSPECTOR</span>
+                        <span class="close-x-btn" onclick="closeGCodeModal()">×</span>
+                    </div>
+                    <div class="cal-modal-body">
+                        <div style="font-size: 11px; color: var(--text-dim); margin-bottom: 12px;">
+                            Reviewing auto-generated toolpath blocks for structural limit collisions before streaming to asset.
+                        </div>
+                        <pre id="cal-modal-gcode-view">; No modules configured.</pre>
+                        <div style="display: flex; gap: 10px; margin-top: 20px;">
+                            <button class="secondary-btn" style="flex: 1;" onclick="closeGCodeModal()">CLOSE INSPECTOR</button>
+                            <button class="action-btn" style="flex: 1;" onclick="closeGCodeModal(); runCalibration();">CONFIRM & RUN TEST</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <!--  -->
             <div class="floating-pane config-modal" id="asset-wizard" style="display:none;">
                 <div class="pane-header">
                     NEW ASSET CONFIGURATION
@@ -198,6 +218,21 @@
         <aside class="right-rail">
             <button class="pane-toggle-btn" id="toggle-right" onclick="togglePane('right')">▶</button>
             <div class="pane-header">AI PREDICTIVE HEALTH RAIL</div>
+
+            <section class="sub-pane telemetry-injector-dock">
+                <h6>Manual Anomaly Injection Matrix</h6>
+                <div class="trigger-btn-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 8px;">
+                    <button class="secondary-btn trigger-btn" onclick="triggerManualAnomaly('info')" style="font-size: 9px; padding: 4px; border-color: var(--accent-green);">
+                        + INFO ACCENT
+                    </button>
+                    <button class="secondary-btn trigger-btn" onclick="triggerManualAnomaly('warning')" style="font-size: 9px; padding: 4px; border-color: var(--accent-amber);">
+                        + WARNING
+                    </button>
+                    <button class="secondary-btn trigger-btn" onclick="triggerManualAnomaly('critical')" style="font-size: 9px; padding: 4px; border-color: var(--accent-red); grid-column: span 2;">
+                        🚨 INJECT CRITICAL HARDWARE FAULT
+                    </button>
+                </div>
+            </section>
             
             <section class="sub-pane alerts-feed">
                 <h6>Chronological Aggregated Alerts</h6>

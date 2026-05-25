@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useFleetStore } from '../../store/useFleetStore.js';
 import { ThermalChart } from './ThermalChart.jsx';
 
@@ -16,6 +16,8 @@ export function HealthRail() {
     printers
   } = useFleetStore();
 
+  const [resolvingIds, setResolvingIds] = useState([]);
+
   const handleFixNow = (e, id) => {
     e.stopPropagation();
     setAlertFixing(id, true);
@@ -24,12 +26,45 @@ export function HealthRail() {
   const handleCloseWizard = (e, id, resolve = false) => {
     e.stopPropagation();
     if (resolve) {
-      addLogEntry("Hardware Diagnostic Performed - Alert Resolved", "SYS");
-      addTimelineEvent("Manual Maintenance Done", "completed");
-      resolveAlert(id);
+      setResolvingIds(prev => [...prev, id]);
+      
+      const alertObj = systemAlerts.find(a => a.id === id);
+      const logText = alertObj 
+        ? `Hardware Diagnostic Performed - Resolved ${alertObj.title}`
+        : "Hardware Diagnostic Performed - Alert Resolved";
+      
+      addLogEntry(`SYSTEM: ${logText}`, "SYS");
+      addTimelineEvent(alertObj ? `Resolved: ${alertObj.title}` : "Manual Maintenance Done", "completed");
+      
+      setTimeout(() => {
+        resolveAlert(id);
+        setResolvingIds(prev => prev.filter(x => x !== id));
+      }, 300);
     } else {
       setAlertFixing(id, false);
     }
+  };
+
+  const getWizardSteps = (title = '') => {
+    if (title.toUpperCase().includes('THERMAL')) {
+      return (
+        <div className="step-text">
+          <span style={{ color: 'var(--accent-green)' }}>[STEP 1]</span> Verify heater cartridge resistance via Multi-meter or check for loose terminal screws.
+        </div>
+      );
+    }
+    if (title.toUpperCase().includes('Z-AXIS')) {
+      return (
+        <div className="step-text">
+          <span style={{ color: 'var(--accent-green)' }}>[STEP 1]</span> Clean Z-axis lead screws, check couplers, and lubricate rods before running mechanical diagnostic.
+        </div>
+      );
+    }
+    return (
+      <div className="step-text">
+        <span style={{ color: 'var(--accent-green)' }}>[STEP 1]</span> Verify hardware resistance and check for loose terminal connections.
+      </div>
+    );
   };
 
   return (
@@ -43,33 +78,38 @@ export function HealthRail() {
       <section className="sub-pane alerts-feed">
         <h6>Chronological Aggregated Alerts</h6>
         <div id="alert-feed-container" className="alert-feed">
-          {systemAlerts.map((alert) => (
-            <div 
-              key={alert.id} 
-              className={`alert-item ${alert.isExpanded ? 'expanded' : ''} ${alert.isFixing ? 'fixing' : ''} ${alert.type}`}
-              onClick={() => toggleAlert(alert.id)}
-            >
-              <div className="alert-header">
-                <div>
-                  <span className={`status-dot ${alert.type}`}>●</span>
-                  <span style={{ fontWeight: 'bold' }}>{alert.title}</span>
+          {systemAlerts.map((alert) => {
+            const isResolving = resolvingIds.includes(alert.id);
+            return (
+              <div 
+                key={alert.id} 
+                className={`alert-item ${alert.isExpanded ? 'expanded' : ''} ${alert.isFixing ? 'fixing' : ''} ${alert.type}`}
+                onClick={() => toggleAlert(alert.id)}
+                style={{
+                  transition: 'transform 0.3s ease, opacity 0.3s ease, max-height 0.4s cubic-bezier(0.4, 0, 0.2, 1), margin-bottom 0.3s ease',
+                  ...(isResolving ? { transform: 'translateX(50px)', opacity: 0, maxHeight: 0, marginBottom: 0, border: 'none' } : {})
+                }}
+              >
+                <div className="alert-header">
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span className={`status-dot ${alert.type}`}>●</span>
+                    <span style={{ fontWeight: 'bold' }}>{alert.title}</span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
+                    <span style={{ fontSize: '9px', color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>{alert.time}</span>
+                    <span className="expand-icon">▼</span>
+                  </div>
                 </div>
-                <span className="expand-icon">{alert.isExpanded ? '▲' : '▼'}</span>
-              </div>
 
-              {!alert.isFixing ? (
                 <div className="alert-detail">
                   <p>{alert.detail}</p>
                   <button className="action-btn initial-fix-btn" onClick={(e) => handleFixNow(e, alert.id)}>
                     FIX NOW
                   </button>
                 </div>
-              ) : (
+
                 <div className="fix-wizard-pane">
-                  <div className="step-text">
-                    <span style={{ color: 'var(--accent-green)' }}>[STEP 1]</span> 
-                    Verify hardware resistance and check for loose terminal connections.
-                  </div>
+                  {getWizardSteps(alert.title)}
                   <div className="control-grid" style={{ marginTop: '15px' }}>
                     <button className="action-btn" onClick={(e) => handleCloseWizard(e, alert.id, true)}>
                       DIAGNOSE / TEST
@@ -79,9 +119,9 @@ export function HealthRail() {
                     </button>
                   </div>
                 </div>
-              )}
-            </div>
-          ))}
+              </div>
+            );
+          })}
         </div>
       </section>
 

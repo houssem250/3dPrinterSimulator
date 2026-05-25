@@ -233,4 +233,28 @@ export class OctoPrintControlService {
       return false;
     }
   }
+
+  /**
+   * Sends a list of arbitrary G-code commands directly to the printer.
+   * @param {string} ip 
+   * @param {string} apiKey 
+   * @param {string[]} commands Array of G-code command strings
+   */
+  static async sendGcodeCommands(ip, apiKey, commands) {
+    const baseUrl = ip.startsWith('http') ? ip : `http://${ip}`;
+    try {
+      const response = await fetch(`${baseUrl}/api/printer/command`, {
+        method: 'POST',
+        headers: {
+          'X-Api-Key': apiKey,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ commands })
+      });
+      return response.status === 204 || response.status === 200;
+    } catch (err) {
+      console.error(`❌ OctoPrint: Failed to send G-code commands:`, err);
+      return false;
+    }
+  }
 }
