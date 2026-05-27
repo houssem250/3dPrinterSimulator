@@ -1,4 +1,4 @@
 @echo off
 echo 🚀 Starting Mosquitto Broker...
-"C:\Program Files\mosquitto\mosquitto.exe" -c "C:\Program Files\mosquitto\mosquitto.conf" -v
+"G:\Program Files\Mosquitto\mosquitto.exe" -c "G:\Program Files\Mosquitto\mosquitto.conf" -v
 pause

@@ -23,14 +23,44 @@ const App = () => {
   } = useFleetStore();
 
   const [activeWizardTab, setActiveWizardTab] = useState('printer-tab');
-  const [wizardData, setWizardData] = useState({ name: '', model: '' });
+  const [wizardData, setWizardData] = useState({
+    name: '',
+    model: '',
+    buildX: '220',
+    buildY: '220',
+    buildZ: '250',
+    material: 'PLA',
+    diameter: '1.75',
+    color: '#FF6B6B',
+    nozzleTemp: '205'
+  });
 
   // Sync wizardData when reconfiguring
   useEffect(() => {
     if (selectedAssetForReconfig) {
-      setWizardData({ name: selectedAssetForReconfig.name, model: selectedAssetForReconfig.model || '' });
+      setWizardData({
+        name: selectedAssetForReconfig.name || '',
+        model: selectedAssetForReconfig.model || '',
+        buildX: selectedAssetForReconfig.buildX || '220',
+        buildY: selectedAssetForReconfig.buildY || '220',
+        buildZ: selectedAssetForReconfig.buildZ || '250',
+        material: selectedAssetForReconfig.material || 'PLA',
+        diameter: selectedAssetForReconfig.diameter || '1.75',
+        color: selectedAssetForReconfig.color || '#FF6B6B',
+        nozzleTemp: selectedAssetForReconfig.nozzleTemp || '205'
+      });
     } else {
-      setWizardData({ name: '', model: '' });
+      setWizardData({
+        name: '',
+        model: '',
+        buildX: '220',
+        buildY: '220',
+        buildZ: '250',
+        material: 'PLA',
+        diameter: '1.75',
+        color: '#FF6B6B',
+        nozzleTemp: '205'
+      });
     }
   }, [selectedAssetForReconfig]);
 
@@ -52,25 +82,43 @@ const App = () => {
   const handleFinishAsset = () => {
     const { setPlacementMode, updateAsset } = useFleetStore.getState();
     const name = wizardData.name || "New Printer";
+    const assetPayload = {
+      name,
+      model: wizardData.model,
+      buildX: wizardData.buildX,
+      buildY: wizardData.buildY,
+      buildZ: wizardData.buildZ,
+      material: wizardData.material,
+      diameter: wizardData.diameter,
+      color: wizardData.color,
+      nozzleTemp: wizardData.nozzleTemp
+    };
     
     if (selectedAssetForReconfig) {
       // Edit existing asset: Handle both metadata AND possible group move
-      updateAsset(targetWizardGroupId, selectedAssetForReconfig.id, { 
-        name, 
-        model: wizardData.model 
-      });
+      updateAsset(targetWizardGroupId, selectedAssetForReconfig.id, assetPayload);
       
       addLogEntry(`SYSTEM: Reconfigured [${name}] and moved to ${fleetGroups.find(g => g.id === targetWizardGroupId)?.groupName}`, "SYS");
       toggleModal('assetWizard', false);
     } else {
       // NEW ASSET: Enter 3D Placement Mode
-      setPlacementMode(true, { name, model: wizardData.model });
+      setPlacementMode(true, assetPayload);
       addLogEntry(`SYSTEM: Entering deployment mode for ${name}. Select a slot in the 3D scene.`, "SYS");
       toggleModal('assetWizard', false);
     }
     
     setSelectedAssetForReconfig(null);
-    setWizardData({ name: '', model: '' });
+    setWizardData({
+      name: '',
+      model: '',
+      buildX: '220',
+      buildY: '220',
+      buildZ: '250',
+      material: 'PLA',
+      diameter: '1.75',
+      color: '#FF6B6B',
+      nozzleTemp: '205'
+    });
   };
 
   const handleEstablishConnection = async () => {
@@ -288,9 +336,33 @@ const App = () => {
                     onChange={(e) => setWizardData({ ...wizardData, model: e.target.value })}
                   />
                   <div className="input-row">
-                    <div><label>Build X</label><input type="number" defaultValue="200" className="industrial-input" /></div>
-                    <div><label>Build Y</label><input type="number" defaultValue="200" className="industrial-input" /></div>
-                    <div><label>Build Z</label><input type="number" defaultValue="200" className="industrial-input" /></div>
+                    <div>
+                      <label>Build X</label>
+                      <input 
+                        type="number" 
+                        value={wizardData.buildX} 
+                        className="industrial-input" 
+                        onChange={(e) => setWizardData({ ...wizardData, buildX: e.target.value })}
+                      />
+                    </div>
+                    <div>
+                      <label>Build Y</label>
+                      <input 
+                        type="number" 
+                        value={wizardData.buildY} 
+                        className="industrial-input" 
+                        onChange={(e) => setWizardData({ ...wizardData, buildY: e.target.value })}
+                      />
+                    </div>
+                    <div>
+                      <label>Build Z</label>
+                      <input 
+                        type="number" 
+                        value={wizardData.buildZ} 
+                        className="industrial-input" 
+                        onChange={(e) => setWizardData({ ...wizardData, buildZ: e.target.value })}
+                      />
+                    </div>
                   </div>
                 </div>
                 <div className="modal-footer">
@@ -301,13 +373,39 @@ const App = () => {
               <div className="tab-pane active" id="filament-tab">
                 <div className="config-body scrollable">
                   <div className="input-row">
-                    <div><label>Material</label><input type="text" defaultValue="PLA" className="industrial-input" /></div>
-                    <div><label>Diameter</label><input type="number" defaultValue="1.75" className="industrial-input" /></div>
+                    <div>
+                      <label>Material</label>
+                      <input 
+                        type="text" 
+                        value={wizardData.material} 
+                        className="industrial-input" 
+                        onChange={(e) => setWizardData({ ...wizardData, material: e.target.value })}
+                      />
+                    </div>
+                    <div>
+                      <label>Diameter</label>
+                      <input 
+                        type="number" 
+                        value={wizardData.diameter} 
+                        className="industrial-input" 
+                        onChange={(e) => setWizardData({ ...wizardData, diameter: e.target.value })}
+                      />
+                    </div>
                   </div>
                   <label>Color</label>
-                  <input type="color" defaultValue="#FF6B6B" style={{ height: '30px', width: '100%' }} />
+                  <input 
+                    type="color" 
+                    value={wizardData.color} 
+                    style={{ height: '30px', width: '100%' }} 
+                    onChange={(e) => setWizardData({ ...wizardData, color: e.target.value })}
+                  />
                   <label>Optimal Nozzle Temp</label>
-                  <input type="number" defaultValue="205" className="industrial-input" />
+                  <input 
+                    type="number" 
+                    value={wizardData.nozzleTemp} 
+                    className="industrial-input" 
+                    onChange={(e) => setWizardData({ ...wizardData, nozzleTemp: e.target.value })}
+                  />
                 </div>
                 <div className="modal-footer">
                   <button className="secondary-btn prev-tab" onClick={() => setActiveWizardTab('printer-tab')}>Back</button>

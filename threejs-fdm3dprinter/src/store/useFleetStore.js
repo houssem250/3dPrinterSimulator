@@ -10,7 +10,25 @@ import { subscribeWithSelector } from 'zustand/middleware';
  */
 export const useFleetStore = create(subscribeWithSelector((set) => ({
   // Fleet status
-  printers: {}, // Map of id -> { pos, temps, status, layer }
+  printers: {
+    0: {
+      id: 0,
+      name: "Mach 01 - 3D Printer",
+      mode: 'disconnected',
+      tempHistory: [],
+      timeline: [
+        { time: "08:00", desc: "Asset Created & Deployed", status: "completed" },
+        { time: "08:00", desc: "Status: IDLE", status: "current" }
+      ],
+      buildX: '220',
+      buildY: '220',
+      buildZ: '250',
+      material: 'PLA',
+      diameter: '1.75',
+      color: '#FF6B6B',
+      nozzleTemp: '205'
+    }
+  }, // Map of id -> { pos, temps, status, layer }
   activePrinterId: null,
   isFleetInitialized: false,
   activeControlAssetId: null, // For switching sidebar to Control Mode
@@ -26,7 +44,17 @@ export const useFleetStore = create(subscribeWithSelector((set) => ({
     { id: "unassigned", groupName: "Unassigned Assets", isOpen: true, assets: [], canDelete: false },
     {
       id: "g1", groupName: "Production Line A", isOpen: true, assets: [
-        { name: "Mach 01 - 3D Printer", id: 0 }
+        {
+          name: "Mach 01 - 3D Printer",
+          id: 0,
+          buildX: '220',
+          buildY: '220',
+          buildZ: '250',
+          material: 'PLA',
+          diameter: '1.75',
+          color: '#FF6B6B',
+          nozzleTemp: '205'
+        }
       ], canDelete: true
     }
   ],
@@ -219,10 +247,21 @@ export const useFleetStore = create(subscribeWithSelector((set) => ({
     if (!assetToMove) return state;
 
     // 2. Insert into target group
+    const existingPrinter = state.printers[assetId] || {};
+    const updatedPrinters = {
+      ...state.printers,
+      [assetId]: {
+        ...existingPrinter,
+        ...updates,
+        name: updates.name || existingPrinter.name
+      }
+    };
+
     return {
       fleetGroups: newGroups.map(group =>
         group.id === targetGroupId ? { ...group, assets: [...group.assets, assetToMove] } : group
-      )
+      ),
+      printers: updatedPrinters
     };
   }),
 

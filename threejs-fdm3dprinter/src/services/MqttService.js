@@ -155,9 +155,51 @@ export class MqttService {
       const subTopic = topicLower.replace(cleanPrefix, '').replace(/^\/+/, '');
 
       // State Capture (Attribute Agnostic - catches it from any packet)
-      if (data.state !== undefined) {
-        localState.state = data.state.toUpperCase();
-        hasUpdate = true;
+      if (data.state !== undefined && data.state !== null) {
+        let stateStr = '';
+        if (typeof data.state === 'string') {
+          stateStr = data.state;
+        } else if (typeof data.state === 'object') {
+          if (typeof data.state.text === 'string') {
+            stateStr = data.state.text;
+          } else if (data.state.text !== undefined && data.state.text !== null) {
+            stateStr = String(data.state.text);
+          }
+
+          // Handle standard OctoPrint state flags if present
+          if (data.state.flags && typeof data.state.flags === 'object') {
+            const flags = data.state.flags;
+            if (flags.printing !== undefined) {
+              const newIsPrinting = !!flags.printing;
+              if (newIsPrinting !== localState.isPrinting) {
+                localState.isPrinting = newIsPrinting;
+                if (newIsPrinting) {
+                  localState.state = localState.isPaused ? "PAUSED" : "PRINTING";
+                } else if (!["PRINTDONE", "PRINTCANCELLED", "PRINTFAILED"].includes(localState.state)) {
+                  localState.state = "IDLE";
+                }
+              }
+              hasUpdate = true;
+            }
+            if (flags.paused !== undefined) {
+              const newIsPaused = !!flags.paused;
+              if (newIsPaused !== localState.isPaused) {
+                localState.isPaused = newIsPaused;
+                if (localState.isPrinting) {
+                  localState.state = newIsPaused ? "PAUSED" : "PRINTING";
+                }
+              }
+              hasUpdate = true;
+            }
+          }
+        } else {
+          stateStr = String(data.state);
+        }
+
+        if (stateStr) {
+          localState.state = stateStr.toUpperCase();
+          hasUpdate = true;
+        }
       }
       if (data.is_printing !== undefined || data.isPrinting !== undefined) {
         const newIsPrinting = data.is_printing ?? data.isPrinting;

@@ -14,18 +14,18 @@ export const generateCalibrationGcode = (activePrinter, selectedTests) => {
 
   // Determine printer parameters (use defaults if unavailable)
   // Our system tracks htemp like "210 °C" or "210"
-  const getTemp = (tempStr) => {
-    if (!tempStr) return 200;
-    const match = String(tempStr).match(/(\d+)/);
-    return match ? parseInt(match[1]) : 200;
+  const getTemp = (tempVal) => {
+    if (tempVal === undefined || tempVal === null) return null;
+    const match = String(tempVal).match(/(\d+)/);
+    return match ? parseInt(match[1]) : null;
   };
 
-  const targetNozzleTemp = getTemp(activePrinter?.htemp || activePrinter?.htempTarget);
-  const targetBedTemp = getTemp(activePrinter?.btemp || activePrinter?.btempTarget || 60);
+  const targetNozzleTemp = getTemp(activePrinter?.nozzleTemp) || getTemp(activePrinter?.htemp) || getTemp(activePrinter?.htempTarget) || 200;
+  const targetBedTemp = getTemp(activePrinter?.btemp) || getTemp(activePrinter?.btempTarget) || 60;
 
-  // We assume a standard 220x220 bed if bedSize is not tracked in the current activePrinter schema
-  const bedX = 220;
-  const bedY = 220;
+  // Read dimensions from activePrinter configuration or fall back to standard 220x220 bed
+  const bedX = activePrinter?.buildX ? parseInt(activePrinter.buildX) : 220;
+  const bedY = activePrinter?.buildY ? parseInt(activePrinter.buildY) : 220;
   
   // 1. THERMAL TEST
   if (selectedTests.thermal) {

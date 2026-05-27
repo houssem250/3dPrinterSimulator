@@ -228,8 +228,7 @@ export class FarmSystem {
 
     // 2. Add to Zustand Store
     state.addAsset(state.targetWizardGroupId, {
-      name: pending.name,
-      model: pending.model,
+      ...pending,
       id: printer.id // Sync IDs
     });
 
