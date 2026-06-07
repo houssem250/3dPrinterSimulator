@@ -82,8 +82,10 @@ export class FarmSystem {
       console.log('🏗️  Vanilla FarmSystem initialized successfully.');
 
       // 4. Register Event Listeners
-      this.renderer.domElement.addEventListener('click', (e) => this._onMouseClick(e));
-      this.renderer.domElement.addEventListener('mousemove', (e) => this._onMouseMove(e));
+      this._boundOnClick = (e) => this._onMouseClick(e);
+      this._boundOnMouseMove = (e) => this._onMouseMove(e);
+      this.renderer.domElement.addEventListener('click', this._boundOnClick);
+      this.renderer.domElement.addEventListener('mousemove', this._boundOnMouseMove);
 
       // Bridge to Zustand for Placement, Fleet, and Selection
       this._setupPlacementSync();
@@ -119,7 +121,7 @@ export class FarmSystem {
 
   _setupPrintCommandSync() {
     // Watch for print commands in Zustand
-    useFleetStore.subscribe(
+    this._unsubPrintCommand = useFleetStore.subscribe(
       (state) => [state.printAction, state.lastPrintCommand, state.activePrinterId],
       ([action, _ts, activeId]) => {
         if (!action) return;
@@ -143,7 +145,7 @@ export class FarmSystem {
 
   _setupSelectionSync() {
     // Watch for selection changes AND focus requests in Zustand
-    useFleetStore.subscribe(
+    this._unsubSelection = useFleetStore.subscribe(
       (state) => [state.activePrinterId, state.lastFocusRequest],
       ([id]) => {
         // We always call select(id) to ensure the camera "snaps back" 
@@ -156,7 +158,7 @@ export class FarmSystem {
 
   _setupFleetSync() {
     // Watch for deletions in the fleet groups
-    useFleetStore.subscribe(
+    this._unsubFleet = useFleetStore.subscribe(
       (state) => state.fleetGroups,
       (groups) => {
         const allAssetIds = new Set(groups.flatMap(g => g.assets.map(a => a.id)));
@@ -182,7 +184,7 @@ export class FarmSystem {
 
   _setupPlacementSync() {
     // Watch for placement mode changes in Zustand
-    useFleetStore.subscribe(
+    this._unsubPlacement = useFleetStore.subscribe(
       (state) => state.placementMode,
       (placement) => {
         if (placement.active) {
@@ -262,11 +264,80 @@ export class FarmSystem {
   }
 
   dispose() {
+    console.log('🏗️  Vanilla FarmSystem disposing...');
     this.isInitialized = false;
-    if (this._rafHandle) cancelAnimationFrame(this._rafHandle);
+    
+    // 1. Cancel requestAnimationFrame
+    if (this._rafHandle) {
+      cancelAnimationFrame(this._rafHandle);
+    }
+
+    // 2. Unsubscribe from Zustand to prevent memory leakage of callbacks
+    if (this._unsubPrintCommand) this._unsubPrintCommand();
+    if (this._unsubSelection) this._unsubSelection();
+    if (this._unsubFleet) this._unsubFleet();
+    if (this._unsubPlacement) this._unsubPlacement();
+
+    // 3. Remove event listeners from the renderer DOM element
+    if (this.renderer && this.renderer.domElement) {
+      if (this._boundOnClick) {
+        this.renderer.domElement.removeEventListener('click', this._boundOnClick);
+      }
+      if (this._boundOnMouseMove) {
+        this.renderer.domElement.removeEventListener('mousemove', this._boundOnMouseMove);
+      }
+    }
+
+    // 4. Clear farm (destroys printers, bays, stops mockers, disposes geometries/materials)
+    if (this.farm) {
+      this.farm.clear();
+      this.farm = null;
+    }
+
+    // 5. Dispose master model geometries & materials
+    if (this.modelLoader && this.modelLoader.model) {
+      this.modelLoader.model.traverse((child) => {
+        if (child.isMesh) {
+          if (child.geometry) {
+            child.geometry.dispose();
+          }
+          if (child.material) {
+            if (Array.isArray(child.material)) {
+              child.material.forEach(m => m.dispose());
+            } else {
+              child.material.dispose();
+            }
+          }
+        }
+      });
+      this.modelLoader.model = null;
+      this.modelLoader = null;
+    }
+
+    // 6. Dispose controls and WebGL context
+    if (this.controls) {
+      this.controls.dispose();
+      this.controls = null;
+    }
     if (this.renderer) {
       this.renderer.dispose();
       this.renderer.domElement.remove();
+      this.renderer = null;
+    }
+
+    // 7. Clean up global AppContext references to avoid memory leaks
+    if (AppContext.examples) {
+      AppContext.examples = null;
+    }
+    AppContext.scene = null;
+    AppContext.camera = null;
+    AppContext.renderer = null;
+    AppContext.controls = null;
+    AppContext.modelLoader = null;
+    AppContext.farm = null;
+    AppContext.printers = [];
+    if (window.app) {
+      delete window.app;
     }
   }
 }

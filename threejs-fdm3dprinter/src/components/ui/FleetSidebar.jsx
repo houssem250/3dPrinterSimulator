@@ -200,6 +200,22 @@ export function FleetSidebar() {
   const handleStartPrint = async () => {
     const { updateActiveJob, setPrintCommand, addLogEntry } = useFleetStore.getState();
 
+    if (activeJob.mode === 'mock_replay') {
+      const { AppContext } = await import('../../../app_context.js');
+      const printer = AppContext.farm.printers.find(p => p.id === activePrinterId);
+      if (printer?.mocker) {
+        if (printer.mocker.intervalId) {
+          addLogEntry("MOCK: Simulation already running.", "SYS");
+          return;
+        }
+        // start() resets state and emits PrintStarted → timeline will log it
+        printer.mocker.start();
+        updateActiveJob({ isPrinting: true, isPaused: false, fileName: "Benchy_Mock_Print.gcode" });
+        addLogEntry("MOCK: Simulated print started.", "SYS");
+      }
+      return;
+    }
+
     // If no file, trigger upload dialog
     if (activeJob.fileName === "No file selected") {
       addLogEntry("SYSTEM: No file loaded. Opening file picker...", "SYS");
@@ -232,6 +248,24 @@ export function FleetSidebar() {
 
   const handlePausePrint = async () => {
     const { updateActiveJob, setPrintCommand, addLogEntry } = useFleetStore.getState();
+
+    if (activeJob.mode === 'mock_replay') {
+      const { AppContext } = await import('../../../app_context.js');
+      const printer = AppContext.farm.printers.find(p => p.id === activePrinterId);
+      if (printer?.mocker) {
+        if (activeJob.isPaused) {
+          printer.mocker.resume();
+          updateActiveJob({ isPaused: false });
+          addLogEntry("MOCK: Simulation resumed.", "SYS");
+        } else {
+          printer.mocker.pause();
+          updateActiveJob({ isPaused: true });
+          addLogEntry("MOCK: Simulation paused.", "SYS");
+        }
+      }
+      return;
+    }
+
     if (!activeJob.isPrinting && activeJob.mode === 'standalone') return;
 
     const newPausedState = !activeJob.isPaused;
@@ -258,6 +292,18 @@ export function FleetSidebar() {
 
   const handleAbortPrint = async () => {
     const { updateActiveJob, setPrintCommand, addLogEntry } = useFleetStore.getState();
+
+    if (activeJob.mode === 'mock_replay') {
+      const { AppContext } = await import('../../../app_context.js');
+      const printer = AppContext.farm.printers.find(p => p.id === activePrinterId);
+      if (printer?.mocker) {
+        // stop() emits PrintDone event → timeline will log "Print Completed"
+        printer.mocker.stop();
+        updateActiveJob({ isPrinting: false, isPaused: false, progress: 0 });
+        addLogEntry("MOCK: Simulated print stopped.", "SYS");
+      }
+      return;
+    }
 
     if (activeJob.mode === 'stream' && activeJob.connectionConfig) {
       const { OctoPrintControlService } = await import('../../services/OctoPrintControlService.js');
@@ -638,8 +684,9 @@ export function FleetSidebar() {
               onClick={() => setControlTab('print')}
             >PRINTING</div>
             <div
-              className={`tab ${controlTab === 'calib' ? 'active' : ''}`}
-              onClick={() => setControlTab('calib')}
+              className={`tab ${controlTab === 'calib' ? 'active' : ''} ${activeJob.mode === 'mock_replay' ? 'disabled' : ''}`}
+              onClick={() => activeJob.mode !== 'mock_replay' && setControlTab('calib')}
+              style={activeJob.mode === 'mock_replay' ? { opacity: 0.5, cursor: 'not-allowed' } : {}}
             >CALIBRATION</div>
           </div>
 
@@ -765,7 +812,7 @@ export function FleetSidebar() {
                   <button
                     className="action-btn btn-start"
                     onClick={handleStartPrint}
-                    disabled={activeJob.fileName === "No file selected" || activeJob.isPrinting}
+                    disabled={activeJob.isPrinting || (activeJob.mode !== 'mock_replay' && activeJob.fileName === "No file selected")}
                   >
                     START
                   </button>
@@ -779,6 +826,8 @@ export function FleetSidebar() {
                   <button
                     className="secondary-btn"
                     onClick={() => document.getElementById('global-file-input').click()}
+                    disabled={activeJob.mode === 'mock_replay'}
+                    style={activeJob.mode === 'mock_replay' ? { opacity: 0.5, cursor: 'not-allowed' } : {}}
                   >
                     UPLOAD
                   </button>
@@ -793,15 +842,16 @@ export function FleetSidebar() {
                   <button
                     className="secondary-btn"
                     onClick={handleDownloadFile}
-                    disabled={activeJob.fileName === "No file selected" || activeJob.mode !== 'stream'}
+                    disabled={activeJob.fileName === "No file selected" || activeJob.mode !== 'stream' || activeJob.mode === 'mock_replay'}
+                    style={activeJob.mode === 'mock_replay' ? { opacity: 0.5, cursor: 'not-allowed' } : {}}
                   >
                     DOWNLOAD
                   </button>
                   <button
                     className="secondary-btn"
                     onClick={handleDeleteFile}
-                    disabled={activeJob.fileName === "No file selected" || activeJob.isPrinting}
-                    style={{ color: 'var(--accent-red)' }}
+                    disabled={activeJob.fileName === "No file selected" || activeJob.isPrinting || activeJob.mode === 'mock_replay'}
+                    style={activeJob.mode === 'mock_replay' ? { color: 'var(--accent-red)', opacity: 0.5, cursor: 'not-allowed' } : { color: 'var(--accent-red)' }}
                   >
                     DELETE
                   </button>
@@ -819,40 +869,40 @@ export function FleetSidebar() {
                   <div className="meta-row"><span>Linear advance:</span> <span>{activeJob.kfactor}</span></div>
                 </div>
 
-                <div className="temp-control-section">
+                <div className="temp-control-section" style={activeJob.mode === 'mock_replay' ? { opacity: 0.5, pointerEvents: 'none' } : {}}>
                   <div className="temp-section-title">Thermal Management</div>
                   <div className="preset-group">
                     <div className="temp-input-wrapper">
                       <label>Material Presets</label>
-                      <select className="industrial-select">
+                      <select className="industrial-select" disabled={activeJob.mode === 'mock_replay'}>
                         <option value="200,60">PLA (200°C / 60°C)</option>
                         <option value="240,100">ABS (240°C / 100°C)</option>
                         <option value="230,80">PETG (230°C / 80°C)</option>
                         <option value="215,60">TPU (215°C / 60°C)</option>
                       </select>
                     </div>
-                    <button className="btn-set" onClick={handleApplyPreset}>SET ALL</button>
+                    <button className="btn-set" onClick={handleApplyPreset} disabled={activeJob.mode === 'mock_replay'}>SET ALL</button>
                   </div>
 
                   <div className="manual-temp-group" style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
                     <div className="temp-input-wrapper">
                       <label>Nozzle (°C)</label>
-                      <input type="number" className="industrial-input" placeholder="200" style={{ width: '100%' }} />
+                      <input type="number" className="industrial-input" placeholder="200" style={{ width: '100%' }} disabled={activeJob.mode === 'mock_replay'} />
                     </div>
                     <button className="btn-set" style={{ height: '32px', alignSelf: 'flex-end' }} onClick={(e) => {
                       const val = e.target.previousSibling.querySelector('input').value;
                       handleSetManualTemp('nozzle', val);
-                    }}>SET</button>
+                    }} disabled={activeJob.mode === 'mock_replay'}>SET</button>
                   </div>
                   <div className="manual-temp-group" style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
                     <div className="temp-input-wrapper">
                       <label>Bed (°C)</label>
-                      <input type="number" className="industrial-input" placeholder="60" style={{ width: '100%' }} />
+                      <input type="number" className="industrial-input" placeholder="60" style={{ width: '100%' }} disabled={activeJob.mode === 'mock_replay'} />
                     </div>
                     <button className="btn-set" style={{ height: '32px', alignSelf: 'flex-end' }} onClick={(e) => {
                       const val = e.target.previousSibling.querySelector('input').value;
                       handleSetManualTemp('bed', val);
-                    }}>SET</button>
+                    }} disabled={activeJob.mode === 'mock_replay'}>SET</button>
                   </div>
                 </div>
               </div>

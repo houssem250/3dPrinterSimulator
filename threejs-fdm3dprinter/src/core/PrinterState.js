@@ -45,7 +45,14 @@ export class PrinterState {
     this.current = frame;
     
     // Push to React Zustand Store (Side effect for Dashboard)
-    useFleetStore.getState().updatePrinter(this.id, this.getSummary());
+    // Throttle React updates to ~10Hz to prevent UI lag in focused mode
+    const now = Date.now();
+    const isTerminal = this.current.status && ['PRINTDONE', 'PRINTCANCELLED', 'PRINTFAILED'].includes(this.current.status.state);
+    
+    if (isTerminal || !this.lastReactUpdate || now - this.lastReactUpdate > 100) {
+      useFleetStore.getState().updatePrinter(this.id, this.getSummary());
+      this.lastReactUpdate = now;
+    }
     
     this._notifySubscribers();
   }

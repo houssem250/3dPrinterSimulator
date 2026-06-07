@@ -15,7 +15,7 @@ export function TopBar() {
     setPrinterStatus(newStatus);
     addLogEntry(`SYSTEM: Transitioning to [${newStatus.toUpperCase()}] mode...`, "SYS");
     
-    if (newStatus === 'standalone' || newStatus === 'disconnected') {
+    if (newStatus === 'standalone' || newStatus === 'disconnected' || newStatus === 'mock_replay') {
       const { AppContext } = await import('../../../app_context.js');
       const printer = AppContext.farm.printers.find(p => p.id === activePrinterId);
       if (printer) {
@@ -29,6 +29,7 @@ export function TopBar() {
   const getStatusClass = () => {
     if (printerStatus === 'connected') return 'status-green';
     if (printerStatus === 'standalone') return 'status-amber';
+    if (printerStatus === 'mock_replay') return 'status-blue';
     return 'status-red';
   };
 
@@ -65,6 +66,7 @@ export function TopBar() {
             <ul className="status-dropdown" style={{ display: 'block' }}>
               <li onClick={() => handleStatusChange('standalone')}>● STANDALONE MODE</li>
               <li onClick={() => handleStatusChange('disconnected')}>● DISCONNECT SYSTEM</li>
+              <li onClick={() => handleStatusChange('mock_replay')}>● MOCK REPLAY MODE</li>
               <hr />
               <li onClick={() => {
                 toggleModal('statusOptions', false);

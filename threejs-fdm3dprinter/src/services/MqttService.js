@@ -1,12 +1,14 @@
 /**
  * @file MqttService.js
  * @description Listens to OctoPrint MQTT topics and feeds the StreamProvider.
- * 
+ * Also handles raw sensor topics: sensor/esp8266/imu and sensor/filament/flow.
+ *
  * Supports multiple concurrent MQTT connections to allow different printers 
  * in the fleet to connect to different OctoPrint instances.
  */
 
 import { PRINTER_CONFIG } from '../../config/printer_config.js';
+import { useFleetStore } from '../store/useFleetStore.js';
 
 export class MqttService {
   constructor() {
@@ -23,6 +25,18 @@ export class MqttService {
      * Value: { stream, topicPrefix, localState, brokerUrl }
      */
     this.instances = new Map();
+
+    // ── Sensor data aggregation ──────────────────────────────────────────────
+    // Vibration: accumulate raw IMU packets into a 1-second tumbling window.
+    // Every second we compute mean + peak and push ONE aggregated point.
+    // This cuts 70 store updates/sec down to 1, saving significant React renders.
+    this.vibWindow = [];       // raw magnitude samples in current 1s window
+    this.vibWindowAccZ = [];   // acc_z samples for baseline reference
+    this.vibWindowTime = Date.now();
+
+    // Flow: still batched (packets arrive at ~2Hz already)
+    this.flowBuffer = [];
+    this.batchInterval = null;
   }
 
   /**
@@ -68,6 +82,14 @@ export class MqttService {
   async connect(overrideUrl = null) {
     const brokerUrl = overrideUrl || PRINTER_CONFIG.MQTT.BROKER_URL;
 
+    // Start the 1-second sensor flush interval
+    if (!this.batchInterval) {
+      this.vibWindowTime = Date.now();
+      this.batchInterval = setInterval(() => {
+        this._flushSensorBuffers();
+      }, 1000);
+    }
+
     if (this.clients.has(brokerUrl)) {
       console.log(`ℹ️ MQTT: Already connected/connecting to ${brokerUrl}`);
       return;
@@ -94,6 +116,9 @@ export class MqttService {
           }
         }
 
+        // Always subscribe to raw sensor topics (shared across all printers on this broker)
+        client.subscribe('sensor/#');
+
         // Legacy fallback
         if (this.instances.size === 0 && brokerUrl === PRINTER_CONFIG.MQTT.BROKER_URL) {
           client.subscribe('octoprint/#');
@@ -119,10 +144,53 @@ export class MqttService {
 
   /**
    * Routes incoming JSON into the correct Digital Shadow instance.
+   * Also handles raw sensor topics (sensor/esp8266/imu, sensor/filament/flow)
+   * by pushing directly to the Zustand store's updateSensorHistory.
    * @private
    */
   _handleMessage(brokerUrl, topic, payload) {
     const topicLower = topic.toLowerCase();
+
+    let data;
+    try {
+      data = JSON.parse(payload);
+      if (!data || typeof data !== 'object') return;
+    } catch (e) { return; }
+
+    // ── Sensor topics (sensor/#) ─────────────────────────────────────────────
+    // These are board-level streams, not per-printer-prefix. We associate them
+    // to ALL printers registered on this broker (typically just one).
+    if (topicLower === 'sensor/esp8266/imu') {
+      const dx = data.delta_acc_x ?? 0;
+      const dy = data.delta_acc_y ?? 0;
+      const dz = data.delta_acc_z ?? 0;
+      // Use full 3-axis magnitude
+      const magnitude = Math.sqrt(dx * dx + dy * dy + dz * dz);
+      this.vibWindow.push(magnitude);
+      this.vibWindowAccZ.push(data.acc_z ?? 0);
+      return;
+    }
+
+    if (topicLower === 'sensor/filament/flow') {
+      const flowPoint = {
+        time: Date.now(),
+        flow_mm_s: data.flow_mm_s ?? 0,
+        counts: data.counts ?? 0,
+      };
+      this.flowBuffer.push(flowPoint);
+      return;
+    }
+
+
+    if (topicLower === 'sensor/esp8266/temperature') {
+      const heatsinkTemp = data.temp_c ?? 0;
+      const { updateHeatsink, printers } = useFleetStore.getState();
+      for (const id of Object.keys(printers)) {
+        updateHeatsink(id, heatsinkTemp);
+      }
+      return;
+    }
+    // ─────────────────────────────────────────────────────────────────────────
 
     // Find machine(s) belonging to this broker and prefix
     let targets = [];
@@ -139,12 +207,6 @@ export class MqttService {
     }
 
     if (targets.length === 0) return;
-
-    let data;
-    try {
-      data = JSON.parse(payload);
-      if (!data || typeof data !== 'object') return;
-    } catch (e) { return; }
 
     targets.forEach(target => {
       const { localState, stream, topicPrefix } = target;
@@ -248,9 +310,15 @@ export class MqttService {
         localState.hasRealLayers = true;
         hasUpdate = true;
       }
-      if (subTopic.includes('event/printpaused')) { localState.isPaused = true; localState.state = "PAUSED"; hasUpdate = true; }
-      if (subTopic.includes('event/printresumed')) { localState.isPaused = false; localState.state = "PRINTING"; hasUpdate = true; }
-      if (subTopic.includes('event/printstarted')) { localState.isPrinting = true; localState.isPaused = false; localState.state = "PRINTSTARTED"; hasUpdate = true; }
+      if (subTopic.includes('event/printpaused'))   { localState.isPaused = true;  localState.state = 'PAUSED';   hasUpdate = true; }
+      if (subTopic.includes('event/printresumed'))  { localState.isPaused = false; localState.state = 'PRINTING'; hasUpdate = true; }
+      // NOTE: PrintStarted → set state to PRINTING (not PRINTSTARTED) so the timeline picks it up
+      if (subTopic.includes('event/printstarted'))  {
+        localState.isPrinting = true;
+        localState.isPaused = false;
+        localState.state = 'PRINTING';
+        hasUpdate = true;
+      }
       if (subTopic.includes('event/printcancelled')) {
         localState.isPrinting = false;
         localState.isPaused = false;
@@ -268,9 +336,21 @@ export class MqttService {
       if (subTopic === 'printer/state') {
         const state = (data.state_id || "").toLowerCase();
         localState.state = state.toUpperCase();
-        if (state === 'printing') { localState.isPrinting = true; localState.isPaused = false; }
-        else if (state === 'paused') { localState.isPrinting = true; localState.isPaused = true; }
-        else { localState.isPrinting = false; localState.isPaused = false; }
+        if (state === 'printing') { 
+          localState.isPrinting = true; 
+          localState.isPaused = false; 
+        } else if (state === 'paused') { 
+          localState.isPrinting = true; 
+          localState.isPaused = true; 
+        } else if (state === 'operational' || state === 'idle') {
+          if (localState.progress === 0 || localState.progress === 100) {
+            localState.isPrinting = false;
+            localState.isPaused = false;
+          }
+        } else {
+          localState.isPrinting = false;
+          localState.isPaused = false;
+        }
         hasUpdate = true;
       }
 
@@ -317,6 +397,64 @@ export class MqttService {
         client.end();
       }
       this.clients.clear();
+    }
+  }
+
+  /**
+   * Publishes a message to the active MQTT broker client.
+   * @param {string} topic 
+   * @param {object|string} payload 
+   */
+  publish(topic, payload) {
+    const brokerUrl = PRINTER_CONFIG.MQTT.BROKER_URL;
+    const client = this.clients.get(brokerUrl);
+    if (client && client.connected) {
+      const payloadStr = typeof payload === 'string' ? payload : JSON.stringify(payload);
+      client.publish(topic, payloadStr);
+    }
+  }
+
+  /**
+   * Flushes aggregated vibration window + flow buffer to the Zustand store.
+   *
+   * IMU: every 1 second, collapse all accumulated raw magnitude samples into
+   * a single { mean, peak, acc_z } data point. This is dramatically more
+   * meaningful than storing raw noise at 70Hz, and avoids render thrashing.
+   *
+   * Flow: still flushed per-packet (low-frequency 2Hz).
+   * @private
+   */
+  _flushSensorBuffers() {
+    const { batchUpdateSensorHistory } = useFleetStore.getState();
+
+    // ── Vibration: collapse 1s window ────────────────────────────────────────
+    let vibPoints = [];
+    if (this.vibWindow.length > 0) {
+      const mags = this.vibWindow;
+      const mean = mags.reduce((s, v) => s + v, 0) / mags.length;
+      const peak = Math.max(...mags);
+      const avgAccZ = this.vibWindowAccZ.length > 0
+        ? this.vibWindowAccZ.reduce((s, v) => s + v, 0) / this.vibWindowAccZ.length
+        : 0;
+
+      vibPoints = [{
+        time: Date.now(),
+        magnitude: mean,  // mean magnitude for smooth trend
+        peak,             // peak magnitude for anomaly detection
+        acc_z: avgAccZ,
+        sampleCount: mags.length
+      }];
+
+      this.vibWindow = [];
+      this.vibWindowAccZ = [];
+    }
+
+    // ── Flow: flush accumulated packets ──────────────────────────────────────
+    const flowPoints = this.flowBuffer.length > 0 ? [...this.flowBuffer] : [];
+    this.flowBuffer = [];
+
+    if (vibPoints.length > 0 || flowPoints.length > 0) {
+      batchUpdateSensorHistory(vibPoints, flowPoints);
     }
   }
 }

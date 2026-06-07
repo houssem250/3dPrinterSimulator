@@ -8,6 +8,7 @@ import { StandaloneProvider } from '../providers/StandaloneProvider.js';
 import { StreamProvider } from '../providers/StreamProvider.js';
 import { SimulationEngine } from '../engine/SimulationEngine.js';
 import { PRINTER_CONFIG } from '../../config/printer_config.js';
+import { TelemetryMocker } from '../services/TelemetryMocker.js';
 
 /**
  * @file PrinterInstance.js
@@ -75,6 +76,11 @@ export class PrinterInstance {
     const prefix = (id === 0) ? "octoPrint/" : `printer${id}/`;
     mqttService.registerPrinter(id, this.stream, prefix);
     console.log(`[Printer ${id}] 📡 Registered for MQTT prefix: ${prefix}`);
+
+    // 7. Initialise Telemetry Mocker
+    this.mocker = new TelemetryMocker(id, (topic, data) => {
+      this.mqttService.publish(topic, data);
+    });
   }
 
   /**
@@ -84,6 +90,12 @@ export class PrinterInstance {
    */
   async switchMode(mode, options = {}) {
     console.log(`[Printer ${this.id}] 🔄 Switching to ${mode} mode...`);
+    
+    // Stop mocker silently (no PrintDone event) when switching away
+    if (this.mocker && this.mocker.intervalId) {
+      this.mocker.stopSilent();
+    }
+
     this.currentProvider.stop();
     this.filament.clear();
 
@@ -91,27 +103,32 @@ export class PrinterInstance {
       const entry = this.mqttService?.instances.get(this.id);
       const oldBrokerUrl = entry?.brokerUrl;
       
-      this.currentProvider = this.standalone; // Fallback provider
+      this.currentProvider = this.standalone;
 
-      // Physically close connection if no one else is using it
       if (this.mqttService && oldBrokerUrl) {
         this.mqttService.disconnect(oldBrokerUrl);
+      }
+    } else if (mode === 'mock_replay') {
+      this.currentProvider = this.stream;
+      if (this.mqttService) {
+        const brokerUrl = PRINTER_CONFIG.MQTT.BROKER_URL;
+        const entry = this.mqttService.instances.get(this.id);
+        if (entry) entry.brokerUrl = brokerUrl;
+        // Only connect — mocker is started manually by the user via the Start button
+        await this.mqttService.connect(brokerUrl);
       }
     } else {
       this.currentProvider = this.stream;
       if (this.mqttService && PRINTER_CONFIG.MQTT.ENABLED) {
         const brokerUrl = options.url || PRINTER_CONFIG.MQTT.BROKER_URL;
-        
-        // Update registration with the new URL context
         const entry = this.mqttService.instances.get(this.id);
         if (entry) entry.brokerUrl = brokerUrl;
-
         await this.mqttService.connect(brokerUrl);
       }
     }
 
     this.state.providerMode = mode;
-    this.state.reset(); // Clear old state and push new mode to UI
+    this.state.reset();
 
     if (mode !== 'disconnected') {
       await this.currentProvider.start();
@@ -129,5 +146,46 @@ export class PrinterInstance {
       if (!found && child.name === name) found = child;
     });
     return found;
+  }
+
+  /**
+   * Cleans up the printer instance to prevent memory/CPU leaks.
+   */
+  dispose() {
+    console.log(`[Printer ${this.id}] 🧹 Disposing resources...`);
+    
+    // 1. Halt the simulation mocker if active
+    if (this.mocker) {
+      this.mocker.stopSilent();
+    }
+
+    // 2. Stop providers
+    if (this.standalone) {
+      this.standalone.stop();
+    }
+    if (this.stream) {
+      this.stream.stop();
+    }
+
+    // 3. Dispose filament renderer
+    if (this.filament) {
+      this.filament.dispose();
+    }
+
+    // 4. Dispose cloned materials and geometries for this instance model
+    this.model.traverse((child) => {
+      if (child.isMesh) {
+        if (child.geometry) {
+          child.geometry.dispose();
+        }
+        if (child.material) {
+          if (Array.isArray(child.material)) {
+            child.material.forEach(m => m.dispose());
+          } else {
+            child.material.dispose();
+          }
+        }
+      }
+    });
   }
 }

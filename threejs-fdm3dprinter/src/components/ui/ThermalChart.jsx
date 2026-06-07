@@ -11,6 +11,10 @@ export function ThermalChart({ history = [] }) {
   const wrapperRef = useRef(null);   // sized div that fills the parent
   const mountRef = useRef(null);   // uPlot mounts here
   const chartRef = useRef(null);
+  
+  const valNozzleRef = useRef(null);
+  const valBedRef = useRef(null);
+  const valHeatsinkRef = useRef(null);
 
   // Build the uPlot column-oriented data array from history prop
   const buildData = (hist) => {
@@ -33,6 +37,17 @@ export function ThermalChart({ history = [] }) {
       show: true,
       drag: { x: false, y: false },
       focus: { prox: 16 },
+      bind: {
+        setCursor: (u) => {
+          const idx = u.cursor.idx;
+          const dataIdx = idx == null ? (u.data[0].length > 0 ? u.data[0].length - 1 : null) : idx;
+          if (dataIdx != null) {
+            if (valNozzleRef.current) valNozzleRef.current.textContent = u.data[1][dataIdx] != null ? ` ${Math.round(u.data[1][dataIdx])}°` : '';
+            if (valBedRef.current) valBedRef.current.textContent = u.data[2][dataIdx] != null ? ` ${Math.round(u.data[2][dataIdx])}°` : '';
+            if (valHeatsinkRef.current) valHeatsinkRef.current.textContent = u.data[3][dataIdx] != null ? ` ${Math.round(u.data[3][dataIdx])}°` : '';
+          }
+        }
+      }
     },
     legend: { show: false },
     padding: [6, 4, 12, 0],
@@ -178,9 +193,9 @@ export function ThermalChart({ history = [] }) {
           userSelect: 'none'
         }}
       >
-        <span style={{ color: '#FF6B6B' }}>● Nozzle</span>
-        <span style={{ color: '#4D96FF' }}>● Bed</span>
-        <span style={{ color: '#FFD93D' }}>● Heatsink</span>
+        <span style={{ color: '#FF6B6B' }}>● Nozzle<span ref={valNozzleRef}></span></span>
+        <span style={{ color: '#4D96FF' }}>● Bed<span ref={valBedRef}></span></span>
+        <span style={{ color: '#FFD93D' }}>● Heatsink<span ref={valHeatsinkRef}></span></span>
         <span style={{ color: 'rgba(255,107,107,0.7)' }}>╌ N.Tgt</span>
         <span style={{ color: 'rgba(77,150,255,0.7)' }}>╌ B.Tgt</span>
       </div>
