@@ -128,26 +128,7 @@ export const useFleetStore = create(subscribeWithSelector((set) => ({
     { time: "---", desc: "Planned Finish", status: "pending" }
   ],
 
-  systemAlerts: [
-    {
-      id: 1,
-      type: 'critical',
-      title: 'THERMAL RUNAWAY PROTECTION',
-      time: '12:04',
-      detail: 'Sensor E0 detected a temperature spike exceeding 15°C/s. Heating has been cut.',
-      isExpanded: false,
-      isFixing: false
-    },
-    {
-      id: 2,
-      type: 'warning',
-      title: 'Z-AXIS SQUARING ERROR',
-      time: '11:50',
-      detail: 'Lead screw deviation detected on Z2 motor (>0.12mm).',
-      isExpanded: false,
-      isFixing: false
-    }
-  ],
+  systemAlerts: [],
 
   // Actions
   setFleetInitialized: (val) => set({ isFleetInitialized: val }),
@@ -408,6 +389,24 @@ export const useFleetStore = create(subscribeWithSelector((set) => ({
   resolveAlert: (id) => set((state) => ({
     systemAlerts: state.systemAlerts.filter(a => a.id !== id)
   })),
+
+  addSystemAlert: (alert) => set((state) => {
+    // Deduplication check: Don't add an alert with the same title if it's already active
+    const exists = state.systemAlerts.find(a => a.title === alert.title);
+    if (exists) return state;
+
+    const newAlert = {
+      id: Date.now(),
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      isExpanded: alert.type === 'critical', // Auto expand critical alerts
+      isFixing: false,
+      ...alert
+    };
+
+    return {
+      systemAlerts: [newAlert, ...state.systemAlerts]
+    };
+  }),
 
   /**
    * Updates a specific printer's telemetry.

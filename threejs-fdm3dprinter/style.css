@@ -77,6 +77,8 @@ body {
 .fleet-manager {
     flex: 1;
     padding: 10px;
+    overflow-y: auto;
+    min-height: 0;
 }
 
 /* The Anchor */
@@ -248,6 +250,7 @@ body {
     flex-direction: column;
     gap: 10px;
     overflow-y: auto;
+    min-height: 0;
     right: 0;
     width: 340px;
     border-right: none;

@@ -9,6 +9,7 @@ import sys
 DB_PATH = 'sample_telemetry/telemetry_temp_err.db'
 BROKER = 'localhost'
 PORT = 1883
+SPEED_FACTOR = 10.0  # Increase this to make replay faster (e.g., 10x real-time)
 
 def get_timestamp(ts_str):
     # Parse ISO8601 string to a datetime object
@@ -61,9 +62,11 @@ def main():
             # Calculate how long to wait based on the timestamps
             delta_seconds = (current_dt - last_dt).total_seconds()
             if delta_seconds > 0:
+                # Apply speed factor to the delay
+                sleep_time = delta_seconds / SPEED_FACTOR
                 # To avoid massive delays if there's a huge gap in the DB, 
-                # we cap the sleep at 5 seconds.
-                sleep_time = min(delta_seconds, 5.0)
+                # we cap the sleep at 5 seconds (also scaled).
+                sleep_time = min(sleep_time, 5.0 / SPEED_FACTOR)
                 time.sleep(sleep_time)
 
         # Publish

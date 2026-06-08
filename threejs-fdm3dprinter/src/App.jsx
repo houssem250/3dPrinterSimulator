@@ -4,6 +4,7 @@ import { FleetSidebar } from './components/ui/FleetSidebar.jsx';
 import { HealthRail } from './components/ui/HealthRail.jsx';
 import { MainViewport } from './components/ui/MainViewport.jsx';
 import { useFleetStore } from './store/useFleetStore.js';
+import { maintenanceEngine } from './core/MaintenanceEngine.js';
 
 const App = () => {
   const { 
@@ -63,6 +64,12 @@ const App = () => {
       });
     }
   }, [selectedAssetForReconfig]);
+
+  // Start the Maintenance Engine
+  useEffect(() => {
+    maintenanceEngine.start();
+    return () => maintenanceEngine.stop();
+  }, []);
 
   // Heartbeat Terminal Logs
   useEffect(() => {

@@ -26,8 +26,8 @@ export function MainViewport() {
   const hasActivePrinter = activePrinterId !== null && printers[activePrinterId];
   const displayPrinter = hasActivePrinter ? printers[activePrinterId] : null;
   const displayEvents = displayPrinter?.timeline || horizontalEvents;
-  const displayTitle = displayPrinter 
-    ? `TIMELINE - ${getPrinterName(activePrinterId)}` 
+  const displayTitle = displayPrinter
+    ? `TIMELINE - ${getPrinterName(activePrinterId)}`
     : 'SESSION TIMELINE - GLOBAL PRINT FARM';
 
   return (
@@ -67,13 +67,11 @@ export function MainViewport() {
           <div className="data-row">Speed: <span>{activePrinter.feedrate ? Math.round(activePrinter.feedrate) : '0'} mm/s</span></div>
           <div className="data-row">Z-Height: <span>{activePrinter.pos?.z?.toFixed(2) || '0.00'} mm</span></div>
           <hr />
-          <div className="data-row status-amber">AI Stress Score: 18</div>
-          <div className="data-row status-green">Belt Tension: 92 N</div>
         </div>
       )}
 
-      {/* G-Code Terminal - Floating bottom left */}
-      <div className="floating-pane gcode-terminal" style={{
+      {/* G-Code Terminal - possible feature to be implemented in the future */}
+      {/* <div className="floating-pane gcode-terminal" style={{
         marginLeft: paneStates.left ? '320px' : '0px'
       }}>
         <div className="pane-header">G-CODE <span className="close-x-btn">×</span></div>
@@ -84,7 +82,7 @@ export function MainViewport() {
             </div>
           ))}
         </pre>
-      </div>
+      </div> */}
 
       {/* Timeline - Floating bottom center/right */}
       {activePrinterId !== null && (
