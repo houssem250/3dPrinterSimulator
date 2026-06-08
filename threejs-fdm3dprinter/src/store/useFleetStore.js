@@ -283,6 +283,10 @@ export const useFleetStore = create(subscribeWithSelector((set) => ({
           name: asset.name,
           mode: 'disconnected',
           tempHistory: [],
+          vibHistory: [],
+          flowHistory: [],
+          cumulativeFlowMm: 0,
+          latestHeatsink: 0,
           timeline: initialTimeline
         }
       }
@@ -410,7 +414,8 @@ export const useFleetStore = create(subscribeWithSelector((set) => ({
    */
   updatePrinter: (id, telemetry) => set((state) => {
     const existing = state.printers[id] || {};
-    const newHistory = [...(existing.tempHistory || [])];
+    let newHistory = existing.tempHistory || [];
+    let lastTempTime = existing.lastTempTime || 0;
 
     // Seed timeline if it doesn't exist
     let timeline = existing.timeline ? [...existing.timeline] : null;
@@ -447,47 +452,88 @@ export const useFleetStore = create(subscribeWithSelector((set) => ({
     }
 
     // Print state updates
+    // Guard: only update timeline for explicit lifecycle transitions.
+    // Streaming telemetry frames often carry isPrinting=false/state=IDLE on motion
+    // packets that don't carry status — do NOT let those clobber an active print session.
     if (telemetry.status && existing.status) {
-      if (telemetry.status.state !== existing.status.state) {
-        if (telemetry.status.state === 'PRINTING' && existing.status.state !== 'PRINTING') {
+      const incoming = telemetry.status.state;
+      const current  = existing.status.state;
+
+      if (incoming !== current) {
+        // Only react to meaningful transitions:
+        if (incoming === 'PRINTING' && current !== 'PRINTING' && current !== 'PAUSED') {
           logEvent("Print Started", "current");
-        } else if (telemetry.status.state === 'PAUSED' && existing.status.state !== 'PAUSED') {
+        } else if (incoming === 'PAUSED' && current === 'PRINTING') {
           logEvent("Print Paused", "completed");
-        } else if (telemetry.status.state === 'PRINTDONE' && existing.status.state !== 'PRINTDONE') {
-          logEvent("Print Completed", "completed");
-        } else if (telemetry.status.state === 'PRINTCANCELLED' && existing.status.state !== 'PRINTCANCELLED') {
+        } else if (incoming === 'PRINTING' && current === 'PAUSED') {
+          logEvent("Print Resumed", "current");
+        } else if (incoming === 'PRINTDONE') {
+          logEvent("Print Completed ✓", "completed");
+        } else if (incoming === 'PRINTCANCELLED') {
           logEvent("Print Cancelled", "completed");
-        } else if (telemetry.status.state === 'IDLE' && existing.status.state === 'PRINTING') {
-          logEvent("Print Finished", "completed");
         }
+        // Explicitly ignore IDLE transitions while a print is active —
+        // those come from motion-only frames that don't carry full status.
       }
     }
 
     // Add new point if it has thermal data
     if (telemetry.temp) {
       const now = Date.now();
-      const nozzle = telemetry.temp.nozzle ?? 0;
-      const bed = telemetry.temp.bed ?? 0;
-      const nozzleTarget = telemetry.temp.nozzleTarget ?? 0;
-      const bedTarget = telemetry.temp.bedTarget ?? 0;
+      
+      // Throttle array pushing to 1Hz to prevent UI lag and array explosion
+      if (now - lastTempTime >= 1000) {
+        newHistory = [...newHistory];
+        const nozzle = telemetry.temp.nozzle ?? 0;
+        const bed = telemetry.temp.bed ?? 0;
+        const nozzleTarget = telemetry.temp.nozzleTarget ?? 0;
+        const bedTarget = telemetry.temp.bedTarget ?? 0;
 
-      // Add fake heatsink (30-45C depending on nozzle temp)
-      const heatsink = 30 + (nozzle * 0.05) + (Math.random() * 0.5);
+        // Use real heatsink temp from latest ESP8266 reading
+        const heatsink = existing.latestHeatsink ?? 0;
 
-      newHistory.push({
-        time: now,
-        nozzle,
-        nozzleTarget,
-        bed,
-        bedTarget,
-        heatsink
-      });
+        newHistory.push({
+          time: now,
+          nozzle,
+          nozzleTarget,
+          bed,
+          bedTarget,
+          heatsink
+        });
 
-      // Sliding window: 10 minutes (600,000ms)
-      const windowMs = 600000;
-      while (newHistory.length > 0 && now - newHistory[0].time > windowMs) {
-        newHistory.shift();
+        // Sliding window: 10 minutes (600,000ms)
+        const windowMs = 600000;
+        while (newHistory.length > 0 && now - newHistory[0].time > windowMs) {
+          newHistory.shift();
+        }
+        
+        lastTempTime = now;
       }
+    }
+
+    // Smart-merge status: streaming frames default isPrinting=false/state=IDLE for
+    // motion-only packets. Guard against IDLE clobbering an active confirmed print.
+    const TERMINAL_STATES = new Set(['PRINTDONE', 'PRINTCANCELLED', 'PRINTFAILED']);
+    const existingState   = existing.status?.state ?? 'IDLE';
+    const incomingStatus  = telemetry.status ?? {};
+    const incomingState   = incomingStatus.state ?? 'IDLE';
+
+    const activelyPrinting = existingState === 'PRINTING' || existingState === 'PAUSED'
+      || existing.isPrinting === true;
+    const incomingTerminal = TERMINAL_STATES.has(incomingState);
+    const incomingIsIdleFalsy = incomingState === 'IDLE'
+      && !(telemetry.status?.isPrinting) && !incomingTerminal;
+
+    let mergedStatus     = incomingStatus;
+    let mergedIsPrinting = telemetry.isPrinting;
+    let mergedIsPaused   = telemetry.isPaused;
+
+    if (activelyPrinting && incomingIsIdleFalsy) {
+      // Incoming frame is a motion/temp/progress packet that doesn't carry a lifecycle event.
+      // Preserve the confirmed print state so buttons don't flicker.
+      mergedStatus     = existing.status;
+      mergedIsPrinting = existing.isPrinting;
+      mergedIsPaused   = existing.isPaused;
     }
 
     return {
@@ -496,7 +542,11 @@ export const useFleetStore = create(subscribeWithSelector((set) => ({
         [id]: {
           ...existing,
           ...telemetry,
+          status:     mergedStatus,
+          isPrinting: mergedIsPrinting !== undefined ? mergedIsPrinting : existing.isPrinting,
+          isPaused:   mergedIsPaused   !== undefined ? mergedIsPaused   : existing.isPaused,
           tempHistory: newHistory,
+          lastTempTime: lastTempTime,
           timeline,
           id
         }
@@ -537,7 +587,129 @@ export const useFleetStore = create(subscribeWithSelector((set) => ({
     fleetGroups: [
       { id: "unassigned", groupName: "Unassigned Assets", isOpen: true, assets: [], canDelete: false }
     ]
-  })
+  }),
+
+  /**
+   * Pushes a new vibration or flow data point into the printer's sensor history.
+   * @param {number|string} id - Printer ID
+   * @param {{ time: number, magnitude: number, acc_z: number } | null} vibPoint
+   * @param {{ time: number, flow_mm_s: number, counts: number } | null} flowPoint
+   */
+  updateSensorHistory: (id, vibPoint = null, flowPoint = null) => set((state) => {
+    const existing = state.printers[id];
+    if (!existing) return state;
+
+    const now = Date.now();
+    const VIB_WINDOW_MS = 30_000; // 30-second rolling window
+    const FLOW_MAX_SAMPLES = 600;  // ~5 minutes at 2 Hz
+
+    let vibHistory = existing.vibHistory ? [...existing.vibHistory] : [];
+    let flowHistory = existing.flowHistory ? [...existing.flowHistory] : [];
+    let cumulativeFlowMm = existing.cumulativeFlowMm ?? 0;
+
+    if (vibPoint) {
+      vibHistory.push(vibPoint);
+      // Trim to 30s rolling window
+      while (vibHistory.length > 0 && now - vibHistory[0].time > VIB_WINDOW_MS) {
+        vibHistory.shift();
+      }
+    }
+
+    if (flowPoint) {
+      // Accumulate positive counts only (ignore negative/noise)
+      if (flowPoint.counts > 0) {
+        // counts is raw encoder pulses; 1 count ≈ 0.0539 mm (encoder calibration)
+        const MM_PER_COUNT = 0.0539;
+        cumulativeFlowMm = cumulativeFlowMm + (flowPoint.counts * MM_PER_COUNT);
+      }
+      flowHistory.push({ ...flowPoint, cumulativeMm: cumulativeFlowMm });
+      if (flowHistory.length > FLOW_MAX_SAMPLES) flowHistory.shift();
+    }
+
+    return {
+      printers: {
+        ...state.printers,
+        [id]: {
+          ...existing,
+          vibHistory,
+          flowHistory,
+          cumulativeFlowMm,
+        }
+      }
+    };
+  }),
+
+  /**
+   * Updates the real heatsink temperature for a printer.
+   */
+  updateHeatsink: (id, temp) => set((state) => {
+    const existing = state.printers[id];
+    if (!existing) return state;
+    return {
+      printers: {
+        ...state.printers,
+        [id]: { ...existing, latestHeatsink: temp }
+      }
+    };
+  }),
+
+  /**
+   * Batches multiple vibration and flow points for all printers to improve React rendering performance.
+   */
+  batchUpdateSensorHistory: (vibPoints = [], flowPoints = []) => set((state) => {
+    const printerIds = Object.keys(state.printers);
+    if (printerIds.length === 0) return state;
+
+    const VIB_WINDOW_MS = 30_000;
+    const FLOW_MAX_SAMPLES = 600;
+    const MM_PER_COUNT = 0.0539;
+
+    const nextPrinters = { ...state.printers };
+    let updated = false;
+
+    for (const id of printerIds) {
+      const existing = nextPrinters[id];
+      if (!existing) continue;
+
+      let vibHistory = existing.vibHistory ? [...existing.vibHistory] : [];
+      let flowHistory = existing.flowHistory ? [...existing.flowHistory] : [];
+      let cumulativeFlowMm = existing.cumulativeFlowMm ?? 0;
+      let pUpdated = false;
+
+      if (vibPoints.length > 0) {
+        vibHistory.push(...vibPoints);
+        const now = Date.now();
+        // Trim to 30s rolling window
+        while (vibHistory.length > 0 && now - vibHistory[0].time > VIB_WINDOW_MS) {
+          vibHistory.shift();
+        }
+        pUpdated = true;
+      }
+
+      if (flowPoints.length > 0) {
+        for (const fp of flowPoints) {
+          if (fp.counts > 0) {
+            cumulativeFlowMm = cumulativeFlowMm + (fp.counts * MM_PER_COUNT);
+          }
+          flowHistory.push({ ...fp, cumulativeMm: cumulativeFlowMm });
+        }
+        while (flowHistory.length > FLOW_MAX_SAMPLES) {
+          flowHistory.shift();
+        }
+        pUpdated = true;
+      }
+
+      if (pUpdated) {
+        nextPrinters[id] = {
+          ...existing,
+          vibHistory,
+          flowHistory,
+          cumulativeFlowMm,
+        };
+        updated = true;
+      }
+    }
+
+    return updated ? { printers: nextPrinters } : state;
+  }),
 })));
-
-

@@ -121,6 +121,9 @@ export class PrinterFarmManager {
     const printer = this.printers[printerIdx];
     const bayIdx = this.bays.findIndex(b => b.id === id);
 
+    // Dispose printer resources (mockers, lines, materials, geometries)
+    printer.dispose();
+
     // 1. Physical Removal
     if (printer.model.parent) printer.model.parent.remove(printer.model);
     if (bayIdx !== -1) {
@@ -340,7 +343,10 @@ export class PrinterFarmManager {
   }
 
   clear() {
-    this.printers.forEach(p => p.model.parent?.remove(p.model));
+    this.printers.forEach(p => {
+      p.dispose();
+      p.model.parent?.remove(p.model);
+    });
     this.bays.forEach(b => b.destroy());
     this.printers = [];
     this.bays = [];

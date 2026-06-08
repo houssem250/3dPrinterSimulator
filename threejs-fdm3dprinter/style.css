@@ -11,6 +11,7 @@
     --accent-green: #00ffc2;
     --accent-amber: #ffb800;
     --accent-red: #ff4b4b;
+    --accent-blue: #38bdf8;
     --text-dim: #777;
     --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
 }
@@ -153,6 +154,10 @@ body {
 
 .status-green {
     color: var(--accent-green);
+}
+
+.status-blue {
+    color: var(--accent-blue);
 }
 
 .status-red {

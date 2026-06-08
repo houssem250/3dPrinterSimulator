@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { useFleetStore } from '../../store/useFleetStore.js';
 import { ThermalChart } from './ThermalChart.jsx';
+import { VibrationChart } from './VibrationChart.jsx';
+import { FlowChart } from './FlowChart.jsx';
 
 export function HealthRail() {
   const { 
@@ -125,28 +127,30 @@ export function HealthRail() {
         </div>
       </section>
 
-      <section className="sub-pane">
-        <h6>Real-time Vibration FFT (ADXL345)</h6>
-        <canvas id="fft-chart"></canvas>
-      </section>
+      {activePrinterId != null && (
+        <>
+          <section className="sub-pane">
+            <h6>Vibration Magnitude (IMU Δacc)</h6>
+            <div style={{ height: '140px' }}>
+              <VibrationChart history={printers[activePrinterId]?.vibHistory || []} />
+            </div>
+          </section>
 
-      <section className="sub-pane">
-        <h6>Nozzle/Bed/heatsink Thermal Health</h6>
-        <div style={{ height: '140px' }}>
-          <ThermalChart history={printers[activePrinterId]?.tempHistory || []} />
-        </div>
-      </section>
+          <section className="sub-pane">
+            <h6>Nozzle/Bed/heatsink Thermal Health</h6>
+            <div style={{ height: '140px' }}>
+              <ThermalChart history={printers[activePrinterId]?.tempHistory || []} />
+            </div>
+          </section>
 
-      <section className="sub-pane fleet-overview">
-        <h6>New 'Fleet Health Overview' Panel</h6>
-        <div className="donut-container">
-          <canvas id="health-donut"></canvas>
-          <div className="donut-stats">
-            <p style={{ margin: '10px 0' }}>Health: 85%</p>
-            <p style={{ margin: '10px 0' }}>Open Tickets: 3</p>
-          </div>
-        </div>
-      </section>
+          <section className="sub-pane">
+            <h6>Filament Flow vs. Extrusion</h6>
+            <div style={{ height: '140px' }}>
+              <FlowChart history={printers[activePrinterId]?.flowHistory || []} />
+            </div>
+          </section>
+        </>
+      )}
     </aside>
   );
 }
