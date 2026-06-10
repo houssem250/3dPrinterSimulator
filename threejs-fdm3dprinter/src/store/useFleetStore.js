@@ -31,6 +31,7 @@ export const useFleetStore = create(subscribeWithSelector((set) => ({
   }, // Map of id -> { pos, temps, status, layer }
   activePrinterId: null,
   isFleetInitialized: false,
+  modelLoadProgress: 0,
   activeControlAssetId: null, // For switching sidebar to Control Mode
   targetWizardGroupId: "unassigned",
   lastFocusRequest: 0, // Timestamp to force 3D sync even if ID is same
@@ -132,6 +133,7 @@ export const useFleetStore = create(subscribeWithSelector((set) => ({
 
   // Actions
   setFleetInitialized: (val) => set({ isFleetInitialized: val }),
+  setModelLoadProgress: (val) => set({ modelLoadProgress: val }),
 
   togglePane: (pane) => set((state) => ({
     paneStates: {

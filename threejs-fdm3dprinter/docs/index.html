@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Octo-Fleet | Hybrid Digital Twin for 3D Printers</title>
+    <meta name="description" content="A low-cost web-based monitoring platform for 3D printing using digital twin technology for predictive maintenance.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="glow-bg"></div>
+    
+    <nav class="navbar">
+        <div class="nav-container">
+            <div class="logo">
+                <div class="logo-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+                        <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
+                        <line x1="12" y1="22.08" x2="12" y2="12"></line>
+                    </svg>
+                </div>
+                <span class="logo-text">OCTO-<span class="text-accent">FLEET</span><span class="tm">™</span></span>
+            </div>
+            <div class="nav-links">
+                <a href="#features">Features</a>
+                <a href="#problem">The Problem</a>
+                <a href="#team">Team</a>
+            </div>
+            <a href="../" class="btn btn-primary">Launch App</a>
+        </div>
+    </nav>
+
+    <main>
+        <section class="hero">
+            <div class="hero-content">
+                <div class="badge">Hybrid Digital Twin</div>
+                <h1 class="hero-title">Predictive Maintenance for <br> <span class="text-accent">FDM 3D Printers</span></h1>
+                <p class="hero-subtitle">A low-cost, web-based monitoring platform combining live 3D visualization with smart failure detection. No firmware changes required.</p>
+                <div class="hero-actions">
+                    <a href="../" class="btn btn-primary btn-large">
+                        Open Dashboard
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+                    </a>
+                    <a href="#features" class="btn btn-secondary btn-large">Explore Features</a>
+                </div>
+                
+                <div class="stats-row">
+                    <div class="stat-item">
+                        <span class="stat-value">20%</span>
+                        <span class="stat-label">Reduction in Failures</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-value">34%</span>
+                        <span class="stat-label">Less Material Waste</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-value">Zero</span>
+                        <span class="stat-label">Firmware Changes</span>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="hero-visual">
+                <div class="glass-card visual-card">
+                    <div class="browser-dots">
+                        <span></span><span></span><span></span>
+                    </div>
+                    <div class="dashboard-mock">
+                        <div class="mock-sidebar"></div>
+                        <div class="mock-main">
+                            <div class="mock-header"></div>
+                            <div class="mock-3d-area">
+                                <div class="cube-wireframe">
+                                    <div class="cube-face front"></div>
+                                    <div class="cube-face back"></div>
+                                    <div class="cube-face left"></div>
+                                    <div class="cube-face right"></div>
+                                    <div class="cube-face top"></div>
+                                    <div class="cube-face bottom"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="problem" class="problem-section">
+            <div class="section-header">
+                <h2>The Cost of <span class="text-accent">Reactive Maintenance</span></h2>
+                <p>Every day, makers and labs face unexpected breakdowns, failed prints, and material waste.</p>
+            </div>
+            <div class="grid cards-grid">
+                <div class="glass-card feature-card">
+                    <div class="card-icon error-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+                    </div>
+                    <h3>Nozzle Clogging</h3>
+                    <p>The most critical failure mode causing under-extrusion and ruined prints.</p>
+                </div>
+                <div class="glass-card feature-card">
+                    <div class="card-icon error-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8.5 14.5A2.5 2.5 0 0011 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 11-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 002.5 2.5z"></path></svg>
+                    </div>
+                    <h3>Heat Creep</h3>
+                    <p>Fan failures that lead to severe clogs and potential fire risks.</p>
+                </div>
+                <div class="glass-card feature-card">
+                    <div class="card-icon error-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>
+                    </div>
+                    <h3>Vibration & Wear</h3>
+                    <p>Bearing wear and belt slippage resulting in layer shifting and poor print quality.</p>
+                </div>
+            </div>
+        </section>
+
+        <section id="features" class="solutions-section">
+            <div class="section-header">
+                <h2>The <span class="text-accent">Octo-Fleet</span> Advantage</h2>
+                <p>A smart, scalable solution designed for universities, industrial SMEs, and print farms.</p>
+            </div>
+            
+            <div class="feature-showcase">
+                <div class="showcase-text">
+                    <div class="feature-item active" data-target="feature-1">
+                        <h3>Real-Time 3D Digital Twin</h3>
+                        <p>What happens on the real printer happens on screen instantly in 3D from any angle. Synchronized in real-time with low latency.</p>
+                    </div>
+                    <div class="feature-item" data-target="feature-2">
+                        <h3>Intelligent Failure Detection</h3>
+                        <p>Multi-stage ML analysis pipeline for early anomaly detection and fault identification. Prevent failures before they occur.</p>
+                    </div>
+                    <div class="feature-item" data-target="feature-3">
+                        <h3>Browser-Native Dashboard</h3>
+                        <p>No installation needed. Interactive 3D printer visualization runs in any web browser on the local network.</p>
+                    </div>
+                </div>
+                <div class="showcase-visual glass-card">
+                    <div class="visual-placeholder" id="feature-1-img">
+                        <div class="visual-icon">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg>
+                        </div>
+                        <span class="visual-caption">Live 3D Visualization</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="team" class="team-section">
+            <div class="section-header">
+                <h2>Our <span class="text-accent">Team</span></h2>
+                <p>University of Abdelhamid Mehri — Constantine 2</p>
+                <p class="subtitle-small">Master's Thesis 2026 • Incubator Label</p>
+            </div>
+            <div class="grid team-grid">
+                <div class="glass-card profile-card">
+                    <div class="profile-avatar">HL</div>
+                    <h3>LEGHELIMI Houssem</h3>
+                    <p class="role">Developer</p>
+                    <p class="desc">System architecture & ML pipeline</p>
+                </div>
+                <div class="glass-card profile-card">
+                    <div class="profile-avatar">MC</div>
+                    <h3>CHAIN Mouadh</h3>
+                    <p class="role">Developer</p>
+                    <p class="desc">IoT, sensors & web dashboard</p>
+                </div>
+                <div class="glass-card profile-card supervisor">
+                    <div class="profile-avatar">MD</div>
+                    <h3>Dr. DJENOUHAT Manel</h3>
+                    <p class="role">Supervisor</p>
+                    <p class="desc">Lecturer-Researcher</p>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <footer>
+        <div class="footer-content">
+            <div class="footer-brand">
+                <span class="logo-text">OCTO-<span class="text-accent">FLEET</span></span>
+                <p>The first 100% Algerian hybrid digital twin for predictive maintenance of FDM 3D printers.</p>
+            </div>
+            <div class="footer-links">
+                <p>&copy; 2026 Octo-Fleet Team. All rights reserved.</p>
+            </div>
+        </div>
+    </footer>
+
+    <script src="app.js"></script>
+</body>
+</html>

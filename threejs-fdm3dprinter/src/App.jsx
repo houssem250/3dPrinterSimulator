@@ -20,8 +20,20 @@ const App = () => {
     setSelectedAssetForReconfig,
     updateActiveJob,
     connectionState,
-    deleteAsset
+    deleteAsset,
+    isFleetInitialized,
+    modelLoadProgress
   } = useFleetStore();
+
+  const [minTimePassed, setMinTimePassed] = useState(false);
+
+  useEffect(() => {
+    // Enforce a minimum of 3.5 seconds for the splash screen
+    const timer = setTimeout(() => setMinTimePassed(true), 3500);
+    return () => clearTimeout(timer);
+  }, []);
+
+  const showSplash = !isFleetInitialized || !minTimePassed;
 
   const [activeWizardTab, setActiveWizardTab] = useState('printer-tab');
   const [wizardData, setWizardData] = useState({
@@ -271,7 +283,36 @@ const App = () => {
   };
 
   return (
-    <div className="dashboard-grid" id="app">
+    <>
+      {/* Minimal Loading Overlay (Vanilla CSS) */}
+      <div className={`splash-overlay ${showSplash ? 'visible' : 'hidden'}`}>
+        <div className="splash-content">
+          <div className="splash-logo-row">
+            
+            {/* Geometric Hexagon / Box Icon */}
+            <svg className="splash-icon" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M50 5 L93.3 30 V70 L50 95 L6.7 70 V30 Z" fill="#00ffc2" />
+              <path d="M20 40 V75 L45 90 V55 Z" fill="#0b0f19" />
+              <path d="M80 40 V75 L55 90 V55 Z" fill="#0b0f19" />
+              <path d="M50 15 L25 30 L50 45 L75 30 Z" fill="#0b0f19" />
+            </svg>
+
+            {/* OCTO-FLEET Typographical Logo */}
+            <h1 className="splash-text">
+              <span className="text-white">OCTO-</span>
+              <span className="text-green">FLEET</span>
+              <span className="text-green tm">™</span>
+            </h1>
+            
+          </div>
+          
+          <span className="splash-subtitle">
+            (Testing Prototype)
+          </span>
+        </div>
+      </div>
+
+      <div className="dashboard-grid" id="app">
       <TopBar />
 
       {/* Global Modals */}
@@ -437,6 +478,7 @@ const App = () => {
         <div className="uptime">Network Uptime: 99.99%</div>
       </footer>
     </div>
+    </>
   );
 };
 

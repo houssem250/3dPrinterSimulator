@@ -1,0 +1,2142 @@
+#app {
+    height: 100vh;
+    width: 100vw;
+}
+
+:root {
+    --bg-main: #0c0c0c;
+    --bg-pane: rgba(22, 22, 22, 0.75);
+    --bg-rail: #050505;
+    --border: rgba(255, 255, 255, 0.08);
+    --accent-green: #00ffc2;
+    --accent-amber: #ffb800;
+    --accent-red: #ff4b4b;
+    --accent-blue: #38bdf8;
+    --text-dim: #777;
+    --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg-main);
+    color: #e0e0e0;
+    font-family: 'Inter', -apple-system, sans-serif;
+    height: 100vh;
+    overflow: hidden;
+}
+
+.led {
+    color: var(--accent-green);
+    text-shadow: 0 0 5px var(--accent-green);
+}
+
+/* 2. Left Sidebar & Tree */
+.left-sidebar {
+    grid-area: side;
+    display: flex;
+    border-right: 1px solid var(--border);
+    background: var(--bg-rail);
+    transition: transform 0.3s ease;
+    position: relative;
+    left: 0;
+    width: 280px;
+    border-left: none;
+}
+
+.left-sidebar.collapsed {
+    transform: translateX(-100%);
+}
+
+.icon-rail {
+    width: 50px;
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 20px;
+    padding-top: 15px;
+}
+
+.nav-icon {
+    font-size: 18px;
+    color: var(--text-dim);
+    cursor: pointer;
+}
+
+.nav-icon.active {
+    color: var(--accent-green);
+    border-left: 2px solid var(--accent-green);
+    padding-left: 5px;
+}
+
+.fleet-manager {
+    flex: 1;
+    padding: 10px;
+    overflow-y: auto;
+    min-height: 0;
+}
+
+/* The Anchor */
+.fleet-manager .pane-header {
+    position: relative;
+    /* CRITICAL: This traps the absolute menu inside the header */
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+/* The Menu */
+#global-add-menu {
+    position: absolute;
+    top: 100%;
+    /* Places it directly below the header */
+    right: 0;
+    /* Aligns it to the right edge of the header */
+    left: auto;
+    /* Overrides any default left alignment */
+    width: 140px;
+    margin-top: -15px;
+    display: none;
+    /* Controlled by JS */
+    z-index: 1001;
+    /* Ensure it stays above tree nodes */
+}
+
+.search-box input {
+    width: 100%;
+    background: #000;
+    border: 1px solid var(--border);
+    color: white;
+    padding: 5px 10px;
+    font-size: 12px;
+    border-radius: 4px;
+}
+
+/* 3. Canvas & Floating Panes */
+/*.canvas-viewport {
+    grid-area: center;
+    position: relative;
+    background: radial-gradient(circle, #1a1a1a 0%, #000 100%);
+}*/
+
+.floating-pane {
+    position: absolute;
+    background: var(--bg-pane);
+    backdrop-filter: blur(10px);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    margin-right: 340px;
+    margin-top: 30px;
+    z-index: 10;
+}
+
+.telemetry-hud {
+    top: 20px;
+    right: 20px;
+    padding: 15px;
+    width: 180px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+}
+
+.data-row {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 5px;
+}
+
+.status-amber {
+    color: var(--accent-amber);
+}
+
+.status-green {
+    color: var(--accent-green);
+}
+
+.status-blue {
+    color: var(--accent-blue);
+}
+
+.status-red {
+    color: var(--accent-red);
+}
+
+
+/* 1. The Terminal Container */
+.gcode-terminal {
+    bottom: 10px;
+    left: 5px;
+    /* margin-left: 320px; removed for React control */
+    width: 380px;
+    /* Slightly wider for better readability */
+    height: 160px;
+    /* Increased height */
+    background: rgba(5, 10, 5, 0.85);
+    /* Darker, slightly green-tinted background */
+    border: 1px solid rgba(0, 255, 194, 0.2);
+    /* Tinted border */
+    box-shadow: 0 0 20px rgba(0, 0, 0, 0.5), inset 0 0 10px rgba(0, 255, 194, 0.05);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+.gcode-terminal .pane-header {
+    background: rgba(0, 255, 194, 0.05);
+    padding: 6px 12px;
+    font-size: 10px;
+    letter-spacing: 1px;
+    border-bottom: 1px solid var(--border);
+}
+
+/* 2. The Output Area */
+#terminal-output {
+    margin: 0;
+    padding: 12px;
+    font-size: 11px;
+    line-height: 1.4;
+    font-family: var(--font-mono);
+    color: var(--accent-green);
+    text-shadow: 0 0 5px rgba(0, 255, 194, 0.5);
+    /* Glowing text effect */
+    overflow-y: auto;
+    flex: 1;
+    position: relative;
+    background: repeating-linear-gradient(0deg,
+            rgba(0, 0, 0, 0.1) 0px,
+            rgba(0, 0, 0, 0.1) 1px,
+            transparent 1px,
+            transparent 2px);
+    /* Subtle scanline texture */
+}
+
+/* 3. Custom Scrollbar for the Terminal */
+#terminal-output::-webkit-scrollbar {
+    width: 4px;
+}
+
+#terminal-output::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.02);
+}
+
+#terminal-output::-webkit-scrollbar-thumb {
+    background: var(--accent-green);
+    border-radius: 2px;
+    box-shadow: 0 0 5px var(--accent-green);
+}
+
+/* 4. Timestamp & System Tags */
+#terminal-output span {
+    opacity: 0.6;
+    margin-right: 8px;
+    font-weight: 300;
+}
+
+/* 5. Terminal Header Refinement */
+
+
+/* 4. Right Rail Widgets */
+.right-rail {
+    grid-area: right;
+    background: var(--bg-rail);
+    border-left: 1px solid var(--border);
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    overflow-y: auto;
+    min-height: 0;
+    right: 0;
+    width: 340px;
+    border-right: none;
+}
+
+.right-rail.collapsed {
+    transform: translateX(100%);
+}
+
+.sub-pane {
+    background: #111;
+    border: 1px solid var(--border);
+    padding: 10px;
+    border-radius: 4px;
+}
+
+.sub-pane h6 {
+    margin: 0 0 10px 0;
+    font-size: 9px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+}
+
+.alert {
+    font-size: 11px;
+    padding: 8px;
+    border-radius: 3px;
+    margin-bottom: 5px;
+    background: rgba(255, 255, 255, 0.03);
+}
+
+.alert.critical {
+    border-left: 3px solid var(--accent-red);
+}
+
+.alert.warning {
+    border-left: 3px solid var(--accent-amber);
+}
+
+/* --- Expandable Alert Feed --- */
+.alert-feed {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.alert-item {
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: 4px;
+    border: 1px solid var(--border);
+    overflow: hidden;
+    /* Clips the detail section when closed */
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    cursor: pointer;
+}
+
+.alert-header {
+    padding: 10px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 11px;
+}
+
+.alert-detail {
+    max-height: 0;
+    /* Hidden by default */
+    overflow: hidden;
+    padding: 0 10px;
+    font-size: 10px;
+    color: var(--text-dim);
+    line-height: 1.5;
+    transition: all 0.3s ease;
+    background: rgba(0, 0, 0, 0.2);
+}
+
+/* Expansion State */
+.alert-item.expanded {
+    border-color: rgba(255, 255, 255, 0.2);
+    background: rgba(255, 255, 255, 0.06);
+}
+
+.alert-item.expanded .alert-detail {
+    max-height: 200px;
+    padding: 10px;
+    border-top: 1px solid var(--border);
+}
+
+/* Stage 2: Fix Wizard active — keep detail expanded AND show wizard */
+.alert-item.fixing {
+    border-color: var(--accent-green);
+    box-shadow: 0 0 15px rgba(0, 255, 194, 0.1);
+}
+
+.alert-item.fixing .alert-detail {
+    max-height: 200px;
+    padding: 10px;
+    border-top: 1px solid var(--border);
+}
+
+/* Collapse expand icon */
+.expand-icon {
+    font-size: 8px;
+    transition: transform 0.3s;
+    display: inline-block;
+}
+
+.alert-item.expanded .expand-icon {
+    transform: rotate(180deg);
+}
+
+/* Status dot colors — ported from vanilla_ui inline styles */
+.status-dot {
+    margin-right: 8px;
+}
+
+.status-dot.critical {
+    color: var(--accent-red);
+}
+
+.status-dot.warning {
+    color: var(--accent-amber);
+}
+
+/* Alert type left-border severity indicators */
+.alert-item.critical {
+    border-left: 3px solid var(--accent-red);
+}
+
+.alert-item.warning {
+    border-left: 3px solid var(--accent-amber);
+}
+
+/* 5. Footer */
+.system-footer {
+    grid-area: footer;
+    background: #000;
+    border-top: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0 15px;
+    font-size: 10px;
+    color: var(--text-dim);
+}
+
+/* Dropdown Logic */
+.status-menu-container {
+    position: relative;
+    cursor: pointer;
+}
+
+.status-trigger {
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 8px;
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: 4px;
+    border: 1px solid transparent;
+    transition: 0.2s;
+}
+
+.status-trigger:hover {
+    background: rgba(255, 255, 255, 0.06);
+    border-color: var(--border);
+}
+
+.status-dropdown {
+    position: absolute;
+    top: 25px;
+    right: 0;
+    width: 220px;
+    background: #050505;
+    border: 1px solid var(--border);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.8);
+    list-style: none;
+    padding: 8px 0;
+    z-index: 1000;
+}
+
+.status-dropdown li {
+    padding: 10px 20px;
+    font-size: 10px;
+    color: #999;
+    cursor: pointer;
+    transition: 0.2s;
+}
+
+.status-dropdown li:hover {
+    background: rgba(0, 255, 194, 0.1);
+    color: var(--accent-green);
+}
+
+/* Config Modal Styling */
+.config-modal {
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 320px;
+    padding: 20px;
+}
+
+.config-body label {
+    display: block;
+    font-size: 10px;
+    color: var(--text-dim);
+    margin-top: 10px;
+}
+
+.config-body input {
+    width: 100%;
+    background: #000;
+    border: 1px solid var(--border);
+    color: #fff;
+    padding: 5px;
+    margin-bottom: 10px;
+}
+
+
+.test-idle {
+    font-size: 10px;
+    color: var(--text-dim);
+    font-style: italic;
+}
+
+.test-running {
+    color: var(--accent-amber);
+    animation: blink 1s infinite;
+}
+
+
+
+/* Header styling for the X button */
+.pane-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 5px;
+    margin-bottom: 5px;
+}
+
+.close-x-btn {
+    cursor: pointer;
+    font-size: 18px;
+    color: var(--text-dim);
+    transition: color 0.2s;
+}
+
+.close-x-btn:hover {
+    color: var(--accent-red);
+}
+
+/* Footer Action Bar */
+.modal-footer {
+    display: flex;
+    gap: 10px;
+    margin-top: 20px;
+}
+
+.action-btn {
+    flex: 2;
+    /* Primary action is wider */
+    background: var(--accent-green);
+    border: none;
+    padding: 10px;
+    font-weight: bold;
+    cursor: pointer;
+    color: #000;
+}
+
+.secondary-btn {
+    flex: 1;
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text-main);
+    cursor: pointer;
+    font-size: 11px;
+    padding: 5px 0;
+    border-radius: 5px;
+}
+
+.secondary-btn:hover {
+    background: rgba(255, 255, 255, 0.05);
+}
+
+/* Fleet Icons */
+.add-btn {
+    cursor: pointer;
+    color: var(--accent-green);
+    font-weight: bold;
+    font-size: 14px;
+    float: right;
+}
+
+/* Wizard Tabs */
+.wizard-tabs {
+    display: flex;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 15px;
+}
+
+.tab-btn {
+    flex: 1;
+    padding: 10px;
+    text-align: center;
+    font-size: 10px;
+    text-transform: uppercase;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+}
+
+.tab-btn.active {
+    border-bottom: 2px solid var(--accent-green);
+    color: var(--accent-green);
+}
+
+.tab-pane {
+    display: none;
+}
+
+.tab-pane.active {
+    display: block;
+}
+
+.scrollable {
+    max-height: 300px;
+    overflow-y: auto;
+    padding-right: 5px;
+}
+
+.input-row {
+    display: flex;
+    gap: 10px;
+}
+
+.input-row div {
+    flex: 1;
+}
+
+/* Dropdown styling for Groups */
+/* Ensure the + sign stays pinned right in the group header */
+.group-node {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    user-select: none;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid transparent;
+    padding: 8px 10px;
+    margin-bottom: 2px;
+    font-weight: 600;
+    font-size: 11px;
+    letter-spacing: 0.5px;
+    color: #fff;
+    transition: 0.2s;
+}
+
+
+/* --- Optimized Fleet Tree --- */
+.tree-node {
+    /* Layout & Alignment */
+    display: flex !important;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    min-height: 32px;
+    /* Set a consistent height to prevent "jitter" */
+
+    /* Styling */
+    position: relative;
+    padding: 6px 10px;
+    font-size: 11px;
+    border-radius: 4px;
+    transition: background 0.2s ease;
+    cursor: default;
+}
+
+.tree-node:hover {
+    background: rgba(255, 255, 255, 0.05);
+}
+
+/* Asset Name Logic */
+.tree-node>span {
+    flex: 1;
+    /* Takes up all available space */
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-right: 15px;
+    /* Ensures text never touches the three dots */
+    color: #ccc;
+}
+
+/* Three Dots Container */
+.asset-actions {
+    margin-left: auto;
+    padding-right: 5px;
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+    /* Visibility Control */
+    visibility: hidden;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+    background: transparent !important;
+    /* Forces removal of any black box */
+    gap: 12px;
+    /* Increased gap for easier clicking */
+    margin-left: auto;
+    padding-right: 10px;
+    background: linear-gradient(to left, var(--bg-rail) 80%, transparent);
+    /* Fade background for icons */
+    position: relative;
+}
+
+/* Show actions on hover OR if the context menu inside is being interacted with */
+.tree-node:hover .asset-actions,
+.tree-node:focus-within .asset-actions,
+.tree-node:active .asset-actions {
+    visibility: visible;
+    opacity: 1;
+}
+
+/* Individual Icon Styling */
+.three-dots {
+    cursor: pointer;
+    padding: 0 5px;
+    font-size: 18px;
+    color: var(--text-dim);
+    line-height: 1;
+    transition: color 0.2s;
+    outline: none;
+}
+
+.three-dots:hover {
+    color: var(--accent-green);
+}
+
+.action-icon {
+    padding: 0 4px;
+    font-size: 10px;
+    cursor: pointer;
+    transition: transform 0.2s;
+    opacity: 0.6;
+}
+
+.action-icon:hover {
+    opacity: 1;
+    transform: scale(1.15);
+}
+
+
+
+
+
+/* Fleet Manager Enhancements */
+.group-node {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid transparent;
+    padding: 8px 10px;
+    margin-bottom: 2px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-weight: 600;
+    font-size: 11px;
+    letter-spacing: 0.5px;
+    color: #fff;
+    transition: 0.2s;
+}
+
+.group-node:hover {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: var(--border);
+}
+
+.group-node::before {
+    content: '';
+    /* FontAwesome or Unicode Arrow */
+    font-size: 8px;
+    margin-right: 8px;
+    color: var(--text-dim);
+    transition: transform 0.2s;
+}
+
+.group-node.open::before {
+    transform: rotate(90deg);
+    color: var(--accent-green);
+}
+
+/* Inline Group Input */
+.inline-input-container {
+    padding: 5px 10px;
+    background: #000;
+    border: 1px solid var(--accent-green);
+    display: flex;
+    gap: 5px;
+}
+
+.inline-input-container input {
+    background: transparent;
+    border: none;
+    color: white;
+    font-size: 11px;
+    flex: 1;
+    outline: none;
+}
+
+.tiny-btn {
+    cursor: pointer;
+    font-size: 10px;
+    padding: 2px 5px;
+    border-radius: 2px;
+}
+
+.btn-ok {
+    background: var(--accent-green);
+    color: #000;
+}
+
+.btn-cancel {
+    color: var(--text-dim);
+}
+
+
+
+
+.asset-context-menu {
+    margin: 0;
+    /* Add this */
+    position: absolute;
+    right: 0;
+    top: 25px;
+    background: #111;
+    border: 1px solid var(--border);
+    list-style: none;
+    padding: 5px 0;
+    z-index: 1000;
+    width: 160px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+}
+
+.asset-context-menu li {
+    padding: 8px 12px;
+    font-size: 11px;
+    cursor: pointer;
+    color: #ccc;
+}
+
+.asset-context-menu li:hover {
+    background: var(--accent-green);
+    color: #000;
+}
+
+/* Operational Pane */
+.print-control-body {
+    padding: 15px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.progress-bar-container {
+    background: #1a1a1a;
+    height: 6px;
+    border-radius: 3px;
+    overflow: hidden;
+    margin: 10px 0;
+    border: 1px solid var(--border);
+}
+
+.progress-fill {
+    height: 100%;
+    background: var(--accent-green);
+    width: 0%;
+    transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 0 10px var(--accent-green);
+}
+
+.control-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+}
+
+.control-grid button {
+    padding: 12px;
+    font-size: 10px;
+    font-weight: bold;
+    text-transform: uppercase;
+}
+
+.top-bar {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 44px;
+    z-index: 1000;
+    background: rgba(10, 10, 10, 0.85);
+    backdrop-filter: blur(16px) saturate(180%);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    display: flex;
+    align-items: center;
+    padding: 0 20px;
+    font-size: 11px;
+    justify-content: space-between;
+    box-shadow: 0 4px 30px rgba(0, 0, 0, 0.5);
+}
+
+.top-bar::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(0, 255, 194, 0.3), transparent);
+}
+
+.system-logo {
+    font-weight: 900;
+    letter-spacing: 3px;
+    color: var(--accent-green);
+    font-family: var(--font-mono);
+    text-transform: uppercase;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.system-logo span {
+    color: #fff;
+    opacity: 0.4;
+    font-weight: 300;
+    letter-spacing: 1px;
+}
+
+.header-actions {
+    display: flex;
+    align-items: center;
+    gap: 25px;
+}
+
+.status-trigger {
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 5px 12px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: 20px;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    font-family: var(--font-mono);
+    font-weight: 600;
+    letter-spacing: 0.5px;
+}
+
+.status-trigger:hover {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(0, 255, 194, 0.3);
+    transform: translateY(-1px);
+}
+
+.status-text {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.status-text::before {
+    content: "";
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    display: inline-block;
+}
+
+.status-green::before {
+    background: var(--accent-green);
+    box-shadow: 0 0 10px var(--accent-green);
+    animation: pulse-green 2s infinite;
+}
+
+.status-amber::before {
+    background: var(--accent-amber);
+    box-shadow: 0 0 10px var(--accent-amber);
+    animation: pulse-amber 2s infinite;
+}
+
+.status-red::before {
+    background: var(--accent-red);
+    box-shadow: 0 0 10px var(--accent-red);
+}
+
+@keyframes pulse-green {
+    0% {
+        box-shadow: 0 0 0px rgba(0, 255, 194, 0);
+    }
+
+    50% {
+        box-shadow: 0 0 12px rgba(0, 255, 194, 0.8);
+    }
+
+    100% {
+        box-shadow: 0 0 0px rgba(0, 255, 194, 0);
+    }
+}
+
+@keyframes pulse-amber {
+    0% {
+        box-shadow: 0 0 0px rgba(255, 184, 0, 0);
+    }
+
+    50% {
+        box-shadow: 0 0 12px rgba(255, 184, 0, 0.8);
+    }
+
+    100% {
+        box-shadow: 0 0 0px rgba(255, 184, 0, 0);
+    }
+}
+
+.user-profile {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    color: rgba(255, 255, 255, 0.5);
+    font-size: 10px;
+    font-family: var(--font-mono);
+}
+
+.user-profile .avatar {
+    width: 28px;
+    height: 28px;
+    background: linear-gradient(135deg, var(--accent-green), #00d1ff);
+    color: #000;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 800;
+    font-size: 12px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+}
+
+.btn-start {
+    background: var(--accent-green);
+    color: #000;
+    border: none;
+    cursor: pointer;
+}
+
+.btn-abort {
+    background: var(--accent-red);
+    color: #fff;
+    border: none;
+    cursor: pointer;
+}
+
+/* Rail Icon Animation */
+@keyframes pulse-green {
+    0% {
+        color: var(--accent-green);
+    }
+
+    50% {
+        color: #fff;
+    }
+
+    100% {
+        color: var(--accent-green);
+    }
+}
+
+#rail-printer-icon.printing {
+    animation: pulse-green 2s infinite;
+}
+
+
+/* Status Text Colors & Glows */
+.status-text {
+    font-weight: bold;
+    transition: all 0.3s ease;
+}
+
+.status-text.green {
+    color: var(--accent-green);
+    text-shadow: 0 0 8px rgba(0, 255, 194, 0.6);
+}
+
+.status-text.amber {
+    color: var(--accent-amber);
+    text-shadow: 0 0 8px rgba(255, 184, 0, 0.6);
+}
+
+.status-text.red {
+    color: var(--accent-red);
+    text-shadow: 0 0 8px rgba(255, 75, 75, 0.6);
+}
+
+/* Optional: Make the trigger pulse slightly when disconnected/warning */
+.status-trigger:has(.red),
+.status-trigger:has(.amber) {
+    border-color: rgba(255, 75, 75, 0.3);
+    animation: status-border-pulse 2s infinite;
+}
+
+@keyframes status-border-pulse {
+    0% {
+        border-color: rgba(255, 75, 75, 0.2);
+    }
+
+    50% {
+        border-color: rgba(255, 75, 75, 0.6);
+    }
+
+    100% {
+        border-color: rgba(255, 75, 75, 0.2);
+    }
+}
+
+
+
+.file-metadata-pane {
+    margin-top: 15px;
+    padding: 12px;
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    font-family: var(--font-mono);
+}
+
+.meta-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 10px;
+    margin-bottom: 4px;
+    color: var(--text-dim);
+}
+
+.meta-row span:last-child {
+    color: var(--accent-green);
+    font-weight: bold;
+}
+
+/* Add a scanline effect when data is "loading" */
+.parsing-active {
+    animation: text-flicker 0.1s infinite alternate;
+}
+
+@keyframes text-flicker {
+    from {
+        opacity: 0.7;
+    }
+
+    to {
+        opacity: 1;
+    }
+}
+
+
+/* printing menu */
+
+/* Tab Navigation */
+.control-tabs {
+    display: flex;
+    border-bottom: 1px solid var(--border);
+    background: rgba(255, 255, 255, 0.02);
+}
+
+.tab {
+    flex: 1;
+    padding: 10px;
+    text-align: center;
+    font-size: 10px;
+    letter-spacing: 1px;
+    cursor: pointer;
+    color: var(--text-dim);
+    transition: all 0.3s;
+}
+
+.tab.active {
+    color: var(--accent-green);
+    background: rgba(0, 255, 194, 0.05);
+    border-bottom: 2px solid var(--accent-green);
+}
+
+/* Tab Content Visibility */
+.tab-content {
+    display: none;
+}
+
+.tab-content.active {
+    display: block;
+}
+
+/* Calibration Specifics */
+.calibration-info {
+    font-size: 11px;
+    color: var(--text-dim);
+    line-height: 1.4;
+    padding: 10px;
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 4px;
+    margin-bottom: 15px;
+}
+
+.calibration-options {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.check-container {
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+    font-size: 11px;
+    color: #ccc;
+    user-select: none;
+}
+
+.check-container input {
+    display: none;
+}
+
+.checkmark {
+    height: 14px;
+    width: 14px;
+    background-color: transparent;
+    border: 1px solid var(--accent-green);
+    margin-right: 10px;
+    display: inline-block;
+    position: relative;
+}
+
+.check-container input:checked+.checkmark:after {
+    content: "";
+    position: absolute;
+    left: 4px;
+    top: 1px;
+    width: 3px;
+    height: 7px;
+    border: solid var(--accent-green);
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg);
+}
+
+.est-time {
+    margin-top: 15px;
+    font-size: 10px;
+    color: var(--text-dim);
+    text-align: right;
+}
+
+
+.event-timeline {
+    margin-top: 15px;
+    padding-left: 15px;
+    border-left: 1px solid var(--border);
+    position: relative;
+}
+
+.event-point {
+    position: relative;
+    padding-bottom: 15px;
+    font-size: 11px;
+}
+
+.event-point::before {
+    content: "";
+    position: absolute;
+    left: -19px;
+    top: 2px;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--border);
+}
+
+.event-point.completed::before {
+    background: var(--accent-green);
+    box-shadow: 0 0 5px var(--accent-green);
+}
+
+.event-point.current::before {
+    background: var(--accent-amber);
+    animation: pulse-amber 1.5s infinite;
+}
+
+@keyframes pulse-amber {
+    0% {
+        transform: scale(1);
+        opacity: 1;
+    }
+
+    50% {
+        transform: scale(1.5);
+        opacity: 0.5;
+    }
+
+    100% {
+        transform: scale(1);
+        opacity: 1;
+    }
+}
+
+
+
+
+/* --- Multi-Stage Alert Feed (Fix Wizard additions) --- */
+
+/* The Wizard Pane - Hidden by default */
+.fix-wizard-pane {
+    display: none;
+    padding: 12px;
+    background: rgba(0, 255, 194, 0.03);
+    border-top: 1px dashed var(--accent-green);
+    animation: slideDown 0.3s ease-out;
+}
+
+/* Step text inside the wizard */
+.step-text {
+    font-size: 11px;
+    font-family: var(--font-mono);
+    color: #ccc;
+    line-height: 1.6;
+    margin-bottom: 5px;
+}
+
+/* Reveal wizard only when .fixing class is present */
+.alert-item.fixing .fix-wizard-pane {
+    display: block;
+}
+
+/* Hide the initial "Fix Now" button once fixing starts */
+.alert-item.fixing .initial-fix-btn {
+    display: none;
+}
+
+/* Select-all master checkbox visual distinction */
+.check-container.select-all {
+    font-weight: 700;
+    color: var(--accent-green);
+    letter-spacing: 0.5px;
+    font-size: 10px;
+    text-transform: uppercase;
+}
+
+@keyframes slideDown {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+
+.timeline-wrapper {
+    margin-top: 20px;
+    max-height: 300px;
+    overflow-y: auto;
+    transition: transform 0.3s ease;
+}
+
+.timeline-wrapper.collapsed {
+    transform: translateY(100%);
+}
+
+.event-timeline {
+    position: relative;
+    padding-left: 20px;
+    margin-left: 10px;
+    border-left: 1px solid var(--border);
+}
+
+.event-point {
+    position: relative;
+    padding-bottom: 20px;
+}
+
+/* The Dot on the line */
+.event-point::before {
+    content: "";
+    position: absolute;
+    left: -24px;
+    top: 4px;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #333;
+    border: 1px solid var(--bg-rail);
+    z-index: 2;
+}
+
+.event-point.completed::before {
+    background: var(--accent-green);
+    box-shadow: 0 0 8px var(--accent-green);
+}
+
+.event-point.current::before {
+    background: var(--accent-amber);
+    animation: pulse-dot 1.5s infinite;
+}
+
+.event-time {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    color: var(--text-dim);
+    margin-bottom: 2px;
+}
+
+.event-desc {
+    font-size: 11px;
+    color: #eee;
+}
+
+@keyframes pulse-dot {
+    0% {
+        transform: scale(1);
+        opacity: 1;
+    }
+
+    50% {
+        transform: scale(1.4);
+        opacity: 0.5;
+    }
+
+    100% {
+        transform: scale(1);
+        opacity: 1;
+    }
+}
+
+
+.timeline-horizontal-container {
+    width: 100%;
+    padding: 20px;
+    background: rgba(0, 0, 0, 0.4);
+    border-top: 1px solid var(--border);
+    overflow-x: auto;
+}
+
+.timeline-h {
+    display: flex;
+    align-items: flex-start;
+    gap: 0;
+    /* Gap is handled by the item width */
+    width: 100%;
+    padding-top: 10px;
+}
+
+.event-point-h {
+    position: relative;
+    flex: 0 0 160px;
+    /* Fixed width for each step */
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+}
+
+/* The Horizontal Connecting Line */
+.event-point-h::after {
+    content: "";
+    position: absolute;
+    top: 5px;
+    /* Aligned with the center of the dot */
+    left: 50%;
+    width: 100%;
+    height: 1px;
+    background: var(--border);
+    z-index: 1;
+}
+
+/* Remove line from the very last item */
+.event-point-h:last-child::after {
+    display: none;
+}
+
+/* The Dot */
+.dot-h {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #333;
+    border: 2px solid var(--bg-main);
+    position: relative;
+    z-index: 2;
+    margin-bottom: 10px;
+    transition: all 0.3s ease;
+}
+
+.event-point-h.completed .dot-h {
+    background: var(--accent-green);
+    box-shadow: 0 0 8px var(--accent-green);
+}
+
+.event-point-h.current .dot-h {
+    background: var(--accent-amber);
+    animation: pulse-dot 1.5s infinite;
+}
+
+.event-point-h.completed::after {
+    background: var(--accent-green);
+}
+
+.time-h {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    color: var(--text-dim);
+    margin-bottom: 4px;
+}
+
+.desc-h {
+    font-size: 10px;
+    color: #ccc;
+    padding: 0 10px;
+    line-height: 1.2;
+}
+
+
+/* Ensure the horizontal content fits inside the wrapper */
+.timeline-h {
+    display: flex;
+    align-items: center;
+    padding: 10px 20px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    height: 100%;
+}
+
+/* Make scrollbar clearly visible */
+.timeline-h::-webkit-scrollbar {
+    height: 8px;
+}
+
+.timeline-h::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 4px;
+}
+
+.timeline-h::-webkit-scrollbar-thumb {
+    background: var(--accent-green);
+    border-radius: 4px;
+}
+
+/* Adjust the G-Code terminal position so it doesn't overlap the timeline */
+.gcode-terminal {
+    bottom: 140px !important;
+    /* Lifted up slightly to sit above the timeline */
+}
+
+/*temp controls*/
+/* Temperature Control Section */
+.temp-control-section {
+    padding-top: 5px;
+    padding-bottom: 5px;
+    margin-top: 5px;
+    margin-bottom: 5px;
+    border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+    /* The break line */
+}
+
+.temp-section-title {
+    font-size: 10px;
+    color: var(--accent-green);
+    text-transform: uppercase;
+    margin-bottom: 12px;
+    letter-spacing: 1px;
+}
+
+.preset-group,
+.manual-temp-group {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 12px;
+    align-items: center;
+}
+
+.temp-input-wrapper {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+}
+
+.temp-input-wrapper label {
+    font-size: 9px;
+    color: var(--text-dim);
+    margin-bottom: 4px;
+}
+
+.industrial-select,
+.industrial-input {
+    background: #000;
+    border: 1px solid var(--border);
+    color: #fff;
+    padding: 6px;
+    font-size: 11px;
+    font-family: var(--font-mono);
+    border-radius: 2px;
+}
+
+.industrial-select:focus,
+.industrial-input:focus {
+    border-color: var(--accent-green);
+    outline: none;
+}
+
+/* Compact Set Button */
+.btn-set {
+    background: rgba(0, 255, 194, 0.1);
+    border: 1px solid var(--accent-green);
+    color: var(--accent-green);
+    font-size: 9px;
+    font-weight: bold;
+    padding: 6px 10px;
+    cursor: pointer;
+    transition: 0.2s;
+    height: 29px;
+    /* Aligns with inputs */
+    margin-top: auto;
+    /* Aligns with input instead of label */
+}
+
+.btn-set:hover {
+    background: var(--accent-green);
+    color: #000;
+}
+
+/*toggle buttons for the panes */
+
+
+/* --- Global Toggle Logic --- */
+.pane-toggle-btn {
+    position: absolute;
+    z-index: 100;
+    background: var(--bg-rail);
+    border: 1px solid var(--border);
+    color: var(--accent-green);
+    cursor: pointer;
+    font-size: 10px;
+    padding: 4px 8px;
+    backdrop-filter: blur(4px);
+}
+
+/* Left Sidebar Toggle */
+
+/* Right Rail Toggle */
+#toggle-right {
+    left: -30px;
+    top: 10px;
+    border-right: none;
+    border-radius: 4px 0 0 4px;
+}
+
+
+/* Reset the Grid to be a single stack */
+.dashboard-grid {
+    display: block;
+    /* No longer using columns */
+    position: relative;
+    width: 100vw;
+    height: 100vh;
+    overflow: hidden;
+    background: #000;
+    transition: grid-template-columns 0.3s ease;
+}
+
+/* The Canvas becomes the background layer */
+.canvas-viewport {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 1;
+    /* Lowest layer */
+    background: radial-gradient(circle, #1a1a1a 0%, #000 100%);
+}
+
+#threejs-mount {
+    width: 100%;
+    height: 100%;
+}
+
+
+
+/* Bottom Timeline stays centered on top */
+.canvas-viewport .timeline-wrapper {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    width: auto;
+    /* margin-right: 340px; removed to allow React dynamic control */
+    /* margin-left: 320px; removed to allow React dynamic control */
+    z-index: 50;
+    transition: transform 0.3s ease;
+    background: rgba(5, 5, 5, 0.85);
+    /* Dark semi-transparent background */
+    backdrop-filter: blur(8px);
+    /* Modern frosted glass look */
+    border-top: 1px solid var(--border);
+    padding: 10px;
+    height: auto;
+    /* Fixed height for the ribbon */
+    overflow: visible;
+    /* ENSURE TOGGLE IS VISIBLE */
+}
+
+
+
+/* Pull the bottom timeline down */
+.timeline-wrapper.collapsed {
+    transform: translateY(100%);
+}
+
+/* Ensure the top bar stays on top of everything */
+.top-bar {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 40px;
+    z-index: 100;
+    background: var(--bg-rail);
+    border-bottom: 1px solid var(--border);
+    /*background: #111;*/
+    display: flex;
+    align-items: center;
+    padding: 0 15px;
+    font-size: 11px;
+    justify-content: space-between;
+}
+
+
+/* Sidebars - Positioned absolutely over the canvas */
+.left-sidebar,
+.right-rail {
+    position: absolute;
+    top: 40px;
+    /* Offset for the Top Bar */
+    bottom: 0;
+    z-index: 50;
+    /* Above the canvas */
+    display: flex;
+    /* ENSURE FLEX IS MAINTAINED */
+    background: rgba(10, 10, 10, 0.85);
+    backdrop-filter: blur(12px);
+    /* Industrial glass effect */
+    border: 1px solid var(--border);
+    transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+    overflow: hidden;
+}
+
+.left-sidebar {
+    left: 0;
+    width: 320px;
+    border-left: none;
+    flex-direction: row;
+    /* Icon rail + Fleet manager */
+}
+
+.right-rail {
+    right: 0;
+    width: 340px;
+    border-right: none;
+    flex-direction: column;
+    /* Stacked widgets */
+    overflow-y: auto;
+    min-height: 0;
+    padding-bottom: 20px;
+}
+
+
+/* Button Positioning */
+#toggle-left {
+    border-left: none;
+    position: absolute;
+    right: -25px;
+    /* Peeks out from the sidebar */
+    top: 20px;
+    width: 25px;
+    height: 40px;
+    border-radius: 0 4px 4px 0;
+}
+
+#toggle-right {
+    position: absolute;
+    left: -25px;
+    /* Peeks out from the sidebar */
+    top: 20px;
+    width: 25px;
+    height: 40px;
+    border-radius: 4px 0 0 4px;
+}
+
+#toggle-bottom {
+    position: absolute;
+    top: -25px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 50px;
+    height: 25px;
+    border-radius: 4px 4px 0 0;
+    display: block;
+}
+
+/* 1. Global Navigation */
+.top-bar {
+    grid-area: head;
+    height: 50px;
+    background: var(--bg-rail);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    padding: 0 20px;
+    gap: 30px;
+    z-index: 100;
+}
+
+.system-logo {
+    font-weight: 800;
+    font-size: 14px;
+    letter-spacing: 1px;
+    color: #fff;
+    min-width: 200px;
+}
+
+.system-logo span {
+    color: var(--accent-green);
+    font-weight: 300;
+}
+
+.header-actions {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+}
+
+.user-profile {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 10px;
+    color: var(--text-dim);
+}
+
+.avatar {
+    width: 24px;
+    height: 24px;
+    background: var(--accent-green);
+    color: #000;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+}
+
+/* TopBar Overview Button */
+.header-nav-center {
+    flex: 1;
+    display: flex;
+    justify-content: center;
+}
+
+.overview-btn {
+    background: rgba(255, 184, 0, 0.05);
+    border: 1px solid rgba(255, 184, 0, 0.3);
+    color: var(--accent-amber);
+    padding: 6px 20px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 2px;
+    cursor: pointer;
+    border-radius: 4px;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    backdrop-filter: blur(5px);
+}
+
+.overview-btn:hover {
+    background: rgba(255, 184, 0, 0.15);
+    border-color: var(--accent-amber);
+    box-shadow: 0 0 15px rgba(255, 184, 0, 0.2);
+    transform: translateY(-1px);
+}
+
+.overview-btn:active {
+    transform: translateY(0px);
+}
+
+/* ---------------------------------------------------- */
+/* Premium Industrial Controls & Micro-Animations       */
+/* ---------------------------------------------------- */
+
+.control-grid button:disabled {
+    opacity: 0.25;
+    cursor: not-allowed;
+    pointer-events: none;
+    border-color: rgba(255, 255, 255, 0.03) !important;
+    background: rgba(255, 255, 255, 0.02) !important;
+    color: var(--text-dim) !important;
+    box-shadow: none !important;
+}
+
+@keyframes status-pulse {
+    0% {
+        transform: scale(0.9);
+        opacity: 0.6;
+    }
+
+    50% {
+        transform: scale(1.15);
+        opacity: 1;
+    }
+
+    100% {
+        transform: scale(0.9);
+        opacity: 0.6;
+    }
+}
+
+.status-pulse-dot {
+    animation: status-pulse 1.8s infinite ease-in-out;
+}
+
+@keyframes amber-breathe {
+    0% {
+        box-shadow: 0 0 2px rgba(255, 184, 0, 0.2);
+        border-color: rgba(255, 184, 0, 0.3);
+        background: rgba(255, 184, 0, 0.02);
+    }
+
+    50% {
+        box-shadow: 0 0 10px rgba(255, 184, 0, 0.5);
+        border-color: rgba(255, 184, 0, 0.8);
+        background: rgba(255, 184, 0, 0.08);
+    }
+
+    100% {
+        box-shadow: 0 0 2px rgba(255, 184, 0, 0.2);
+        border-color: rgba(255, 184, 0, 0.3);
+        background: rgba(255, 184, 0, 0.02);
+    }
+}
+
+.btn-paused-breathe {
+    animation: amber-breathe 2s infinite ease-in-out !important;
+    border: 1px solid var(--accent-amber) !important;
+    color: var(--accent-amber) !important;
+    font-weight: bold;
+}
+
+/* ─── uPlot Dark-Theme Overrides ───────────────────────────────────────────── */
+.uplot,
+.uplot *,
+.uplot canvas {
+    background: transparent !important;
+    border: none !important;
+}
+
+.uplot .u-wrap {
+    background: transparent !important;
+}
+
+/* Tooltip / legend cursor line */
+.uplot .u-cursor-x,
+.uplot .u-cursor-y {
+    border-color: rgba(255, 255, 255, 0.15) !important;
+}
+
+/* Tooltip popup */
+.uplot .u-tooltip {
+    background: rgba(15, 15, 20, 0.92) !important;
+    border: 1px solid rgba(255, 255, 255, 0.08) !important;
+    color: #ccc !important;
+    font-size: 10px !important;
+    font-family: 'Inter', monospace !important;
+    border-radius: 4px !important;
+    padding: 4px 8px !important;
+}
+
+/* Y-axis tick labels */
+.uplot .u-axis text,
+.uplot text {
+    fill: #555 !important;
+    font-size: 10px !important;
+    font-family: 'Inter', monospace !important;
+}
+
+/* Cursor crosshair dots */
+.uplot .u-cursor-pt {
+    border-radius: 50% !important;
+}
+
+/* --- CALIBRATION TEST EXECUTION ENGINE UI --- */
+.calibration-steps-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 15px;
+    max-height: 280px;
+    overflow-y: auto;
+}
+
+.cal-step-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-family: monospace;
+    background: rgba(255, 255, 255, 0.02);
+    border-left: 3px solid #333;
+    transition: all 0.3s ease;
+}
+
+.cal-step-row.processing {
+    border-left-color: var(--accent-green);
+    color: #fff;
+    background: rgba(0, 243, 255, 0.02);
+}
+
+.cal-step-row.success {
+    border-left-color: var(--accent-green);
+    background: rgba(57, 255, 20, 0.04);
+    color: var(--accent-green);
+}
+
+.cal-step-row.failed {
+    border-left-color: var(--accent-red);
+    background: rgba(255, 0, 85, 0.04);
+    color: #ff6b8b;
+}
+
+/* AI Style Scanning/Pulse Dot Spinner */
+.cal-spinner {
+    width: 10px;
+    height: 10px;
+    border: 2px solid rgba(57, 255, 20, 0.1);
+    border-top-color: var(--accent-green);
+    border-radius: 50%;
+    animation: calSpin 0.8s linear infinite;
+    flex-shrink: 0;
+}
+
+@keyframes calSpin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+/* --- G-Code Console Box Preview --- */
+.gcode-preview-container {
+    background: rgba(0, 0, 0, 0.4);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 8px;
+}
+
+#cal-gcode-preview {
+    margin: 0;
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 10px;
+    color: #aae4ff;
+    /* Cool code blue color */
+    max-height: 110px;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    word-break: break-all;
+    line-height: 1.4;
+}
+
+/* Custom scrollbar for the preview block */
+#cal-gcode-preview::-webkit-scrollbar {
+    width: 4px;
+}
+
+#cal-gcode-preview::-webkit-scrollbar-thumb {
+    background: var(--border);
+    border-radius: 2px;
+}
+
+/* --- WIDESCREEN CALIBRATION MODAL OVERLAY --- */
+.cal-modal-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(0, 0, 0, 0.75);
+    backdrop-filter: blur(8px);
+    z-index: 200;
+    /* Over everything */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s ease;
+}
+
+.cal-modal-overlay.active {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+.cal-modal-window {
+    background: #0d0f12;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    width: 700px;
+    padding: 5px 10px;
+    max-width: 90vw;
+    max-height: 80vh;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6);
+}
+
+.cal-modal-body {
+    padding: 20px;
+    overflow-y: auto;
+    flex: 1;
+}
+
+#cal-modal-gcode-view {
+    background: #050709;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    padding: 15px;
+    font-family: 'Courier New', monospace;
+    font-size: 11px;
+    color: #aae4ff;
+    max-height: 350px;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    line-height: 1.5;
+    border-radius: 4px;
+}
+
+/* --- DYNAMIC TROUBLESHOOTING GUIDE CARDS --- */
+.diagnostic-guide-box {
+    margin-top: 15px;
+    padding: 12px;
+    background: rgba(255, 107, 139, 0.05);
+    border: 1px solid rgba(255, 107, 139, 0.2);
+    border-radius: 4px;
+}
+
+.diagnostic-title {
+    font-size: 11px;
+    font-weight: bold;
+    color: #ff6b8b;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.diagnostic-steps {
+    margin: 0;
+    padding-left: 18px;
+    font-size: 11px;
+    color: var(--text-dim);
+    line-height: 1.6;
+}
+
+.diagnostic-steps li {
+    margin-bottom: 4px;
+}
+
+.diagnostic-steps strong {
+    color: #eee;
+}

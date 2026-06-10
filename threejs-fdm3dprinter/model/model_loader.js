@@ -13,6 +13,7 @@ import {
   MATERIAL_DEFAULTS,
 } from './model_constants.js';
 import { PRINTER_CONFIG } from '../config/printer_config.js';
+import { useFleetStore } from '../src/store/useFleetStore.js';
 
 export class ModelLoader {
 
@@ -58,7 +59,12 @@ export class ModelLoader {
           console.log(`✅ Model loaded: ${url} (${PART_NAMES.size} parts)`);
           resolve(this.model);
         },
-        undefined,
+        (xhr) => {
+          if (xhr.lengthComputable) {
+            const percent = Math.round((xhr.loaded / xhr.total) * 100);
+            useFleetStore.getState().setModelLoadProgress(percent);
+          }
+        },
         (error) => {
           console.error(`❌ Failed to load model: ${url}`, error);
           reject(error);

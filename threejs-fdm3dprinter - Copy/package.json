@@ -1,0 +1,37 @@
+{
+  "name": "threejs-fdm3dprinter",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.2.2",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@types/three": "^0.184.0",
+    "@vitejs/plugin-react": "^4.3.4",
+    "autoprefixer": "^10.5.0",
+    "postcss": "^8.5.10",
+    "tailwindcss": "^4.2.2",
+    "typescript": "^6.0.3",
+    "vite": "^5.4.21"
+  },
+  "dependencies": {
+    "@react-three/drei": "^10.7.7",
+    "@react-three/fiber": "^9.6.0",
+    "@tailwindcss/postcss": "^4.2.2",
+    "chart.js": "^4.5.1",
+    "lodash": "^4.18.1",
+    "lucide-react": "^1.8.0",
+    "react": "^19.2.5",
+    "react-chartjs-2": "^5.3.1",
+    "react-dom": "^19.2.5",
+    "three": "^0.183.2",
+    "uplot": "^1.6.32",
+    "zustand": "^5.0.12"
+  }
+}

@@ -1,0 +1,285 @@
+HYBRID DIGITAL TWIN
+FOR PREDICTIVE MAINTENANCE
+A low-cost web-based monitoring platform for 3d printing using digital twin technology for predictive maintenance
+[ Attestation Domiciliation Placeholder ]
+شهادة التوطين
+OVERVIEW
+TABLE OF CONTENTS
+01
+Problem Statement
+07
+Project Growth
+02
+Proposed Solutions
+08
+Costs
+03
+Added Value
+09
+Future Prospects
+04
+Innovation
+10
+Screenshots
+05
+Business Model Canvas
+11
+Our Team
+06
+Clients
+01 — PROBLEM
+FDM Problem
+Every day, makers, engineering labs, and small businesses use FDM 3D printers to create prototypes, functional parts, and small production runs. However, printer failures remain a common problem. Unexpected breakdowns, failed prints, material waste, and machine downtime can lead to lost time and higher costs.
+Most users still rely on reactive maintenance, meaning they only address problems after a failure occurs. This happens because desktop 3D printers often lack monitoring tools, and users have little visibility into the condition of their printers while a print is running. 
+As a result, makers, laboratories, and small businesses need a simple solution that can monitor printer health in real time, detect potential issues early, and help prevent failures before they happen. This would reduce downtime, minimize waste, and allow users to print with greater confidence and reliability.
+01 — PROBLEM
+FDM Problem
+>20%
+Failure rate in real-world FDM use
+34%
+Average material waste per failed print
+Zero
+Monitoring built into most desktop printers
+Common Failure Modes
+Nozzle Clogging
+Most critical failure mode
+Overheating / Heat Creep
+Fan failure → fire risk
+Layer Shifting
+Belt slippage, missed steps
+Bearing Wear
+Vibration increase over time
+Belt Breakage
+Detectable via vibration trends
+Reactive maintenance = expensive downtime, wasted filament, lost productivity
+The current reactive maintenance model leads to costly downtime, wasted filament, and lost productivity. The blank area on the right suggests a space for proposing a predictive monitoring solution to address these specific failure modes.
+02 — PROPOSED SOLUTION
+Introducing Octo-Fleet
+A web-based Hybrid Digital Twin platform for predictive maintenance of FDM 3D printers, built on top of OctoPrint.
+"Octo" from OctoPrint · "Fleet" for multi-printer management
+Real-Time Monitoring
+Live machine data such as vibration, temperature, extrusion state in synchronized time with low latency
+Intelligent Failure Detection
+Multi-stage analysis pipeline for early anomaly detection and fault identification.
+Browser-Native Dashboard
+No installation needed. Interactive 3D printer visualization runs in any web browser on the local network.
+Low-Cost Hardware
+Affordable 
+external
+ sensor kit. No firmware modifications required.
+03 — Added Value
+Added Value
+Cost savings of
+ruined prints, wasted filament
+, hardware maintain cost
+ 
+No firmware changes needed & affordable hardware makes predictive maintenance accessible to labs and businesses.
+Health monitoring shows each machine’s condition instantly
+Fault alerts map directly to clear maintenance steps
+04 — Innovation
+Innovation
+Octo-Fleet is the first 100% Algerian hybrid digital twin for predictive maintenance of FDM 3D printers. It combines live 3D visualization with smart failure detection inside a web browser. No installation & No firmware changes.
+The system works from day one and gets smarter with every print. Low-cost hardware makes predictive maintenance accessible to labs, makerspaces, and small businesses. Alerts are reliable and easy to understand so no unnecessary warnings or confusing data.
+With proven accuracy and less unplanned downtime, Octo-Fleet lets you print with confidence, save filament, and keep your machines running longer.
+05 — Business Model Canvas
+Business Model Canvas
+KEY PARTNERS
+▸ 
+Algerian universities / MESRS
+▸ 
+Local 3D printer distributors
+▸ 
+Marlin/Klipper communities
+▸ 
+Sensor & edge hardware vendors
+KEY ACTIVITIES
+▸ 
+Sensor data acquisition
+▸ 
+Digital twin modeling
+▸ 
+ML failure prediction
+▸ 
+Pilot site deployments
+KEY RESOURCES
+▸ 
+Digital Twin AI engine
+▸ 
+Agnostic sensor layer
+▸ 
+FDM & ML expert team
+VALUE PROPOSITION
+CUSTOMER SEGMENTS
+▸ 
+Primary: universities & labs
+▸ 
+Secondary: industrial SMEs
+▸ 
+Tertiary: print service bureaus
+COST STRUCTURE
+▸ 
+Core team salaries & local server  |  Hardware sensor kits & travel  |  R&D fleet testing
+REVENUE STREAMS
+▸ 
+Annual subscriptions (per site)  |  Hardware kit & installation fees  |  Bank virement & 
+"
+bon de 
+commande
+"
+▸ 
+60–8
+0
+% downtime drop
+▸ 
+Saves costly filament
+▸ 
+No cloud dependency
+▸ 
+Low 
+ hardware
+ cost
+▸ 
+Multi-Language
+ support
+06 — Clients
+Clients
+Universities
+& Laboratories &
+Technical schools
+Industrial
+SMEs
+Individuals
+Prototyping studios
+Small print farms
+Octo-Fleet serves anyone who relies on FDM 3D printers for work, research, or personal projects.
+07 — Project Growth
+Project Growth
+Now
+Prototype
+Single BCN3D+ printer
+Ready from the start
+Web dashboard deployed
+Low-cost installation
+Phase 2
+Multi-Printer Fleet
+Support stack of printers
+Fleet health overview
+Amelioration predictive system
+Vision-based monitoring
+Phase 3
+Cloud & Scale
+Cloud-sync dashboard
+Closed-loop auto-correction
+Auto-adjust
+SaaS model for SMEs
+Vision
+Industry 4.0 Platform
+Compatibility with any FDM printer
+Automated notifications
+Part health monitoring
+Open-source community
+Long-term: expand to SLA, SLS, and other manufacturing equipment — the first Algerian IIoT monitoring platform
+08 — Costs
+Costs
+Administrative fees
+Office rental
+Legal & admin fees
+IT tools & licenses
+Technology infrastructure
+Software development
+Third-party services
+Testing & calibration
+Sensor kit hardware
+Marketing
+Ads 
+University events 
+Tech conferences
+09 — Future Prospects
+Future Prospects
+M A R K E T P O T E N T I A L
+Academia & Research Labs
+U
+niversities in Algeria with FDM printers
+Partner with MESRS to deploy in engineering faculties and maker labs nationwide.
+Industrial SMEs
+SMEs in Algeria using 3D printing
+Provide affordable predictive maintenance to small manufacturers, prototyping shops, and local print farms..
+Regional Expansion
+w
+ilayas targeted in 5 years
+First 100% Algerian IoT monitoring platform. Scalable to 
+other technologies
+, and broader manufacturing equipment.
+Target: launch in Algiers → expand to 58 wilayas in 5 years → become the first Algerian IIoT platform
+Several Screenshots
+USER APPLICATION
+10 — SCREENSHOTS
+Real-Time 3D Digital Twin Web Dashboard 
+◀ Printer Control Panel
+Live 3D Twin Model ▲
+AI Health Rail ▶
+10 — SCREENSHOTS
+Real-Time 3D Digital Twin Web Dashboard 
+◀ Printer Control Panel
+Live 3D Twin Model ▲
+AI Health Rail ▶
+Printer Control Panel
+Start, stop, or upload a print. Monitor progress, estimated time, and filament usage
+Print Status
+Current and total layers
+Real-time print speed
+Current nozzle height
+10 — SCREENSHOTS
+Real-Time 3D Digital Twin Web Dashboard 
+◀ Printer Control Panel
+Live 3D Twin Model ▲
+AI Health Rail ▶
+Real-Time Alerts
+Actionable warnings
+Vibration Monitoring
+Live graph showing printer vibration patterns
+Thermal Health
+Live temperature readings for nozzle, bed, and heatsink. Spot overheating before it fails.
+Filament Flow
+Actual filament usage compared to expected extrusion. Detects clogs or slipping immediately.
+10 — SCREENSHOTS
+Real-Time 3D Digital Twin Web Dashboard 
+◀ Printer Control Panel
+Live 3D Digital Twin Model ▲
+AI Health Rail ▶
+Live 3D Printer Model
+What happens on the real printer happens on screen so instantly in 3D from any angle
+10 — SCREENSHOTS
+Live 3D Printer Monitoring
+Live Dashboard shows synchronization between Physical Printer and 3D Digital Twin Model
+[ Screenshot Placeholder ]
+[ Screenshot Placeholder ]
+Physical Printer
+Digital Twin
+11 — OUR TEAM
+University, Labels & Team
+🏛  University of Abdelhamid Mehri — Constantine 2
+Faculty NTIC  ·  Dept. Fundamental Computing (IFA)
+Option: Software Engineering & Smart Systems (ILSI)  ·  Master's Thesis 2026
+🏆 Label
+University of Constantine 2
+ incubator 
+L
+LEGHELIMI Houssem eddine
+Developer
+Master 2 — Computer Science
+System architecture & ML pipeline
+C
+CHAIN Mouadh
+Developer
+Master 2 — Computer Science
+IoT, sensors & web dashboard
+D
+DR. DJENOUHAT Manel
+Supervisor
+Doctorate — Lecturer-Researcher
+University of Constantine 2
+Thank You
+Octo-Fleet
+Hybrid Digital Twin for Predictive Maintenance
+University of Constantine 2  ·  NTIC Faculty  ·  June 2026

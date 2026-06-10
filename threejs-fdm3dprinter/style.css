@@ -1702,7 +1702,7 @@ body {
 .left-sidebar,
 .right-rail {
     position: absolute;
-    top: 40px;
+    top: 50px;
     /* Offset for the Top Bar */
     bottom: 0;
     z-index: 50;
@@ -1714,8 +1714,7 @@ body {
     /* Industrial glass effect */
     border: 1px solid var(--border);
     transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
-    overflow: visible;
-    /* ENSURE TOGGLE IS VISIBLE */
+    overflow: hidden;
 }
 
 .left-sidebar {
@@ -1732,6 +1731,9 @@ body {
     border-right: none;
     flex-direction: column;
     /* Stacked widgets */
+    overflow-y: auto;
+    min-height: 0;
+    padding-bottom: 20px;
 }
 
 
@@ -2137,4 +2139,95 @@ body {
 
 .diagnostic-steps strong {
     color: #eee;
+}
+
+/* Splash Screen Styles */
+.splash-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 9999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-color: #0b0f19;
+    color: white;
+    font-family: 'Inter', -apple-system, sans-serif;
+    user-select: none;
+    transition: opacity 1s ease-in-out;
+}
+
+.splash-overlay.visible {
+    opacity: 1;
+}
+
+.splash-overlay.hidden {
+    opacity: 0;
+    pointer-events: none;
+}
+
+.splash-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    animation: splash-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+.splash-logo-row {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.splash-icon {
+    width: 4rem;
+    height: 4rem;
+}
+
+.splash-text {
+    font-size: 3rem;
+    font-weight: bold;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    display: flex;
+    align-items: baseline;
+    padding-top: 0.5rem;
+    margin: 0;
+}
+
+.splash-text .text-white {
+    color: white;
+}
+
+.splash-text .text-green {
+    color: var(--accent-green);
+}
+
+.splash-text .tm {
+    font-size: 1.125rem;
+    margin-left: 0.5rem;
+    font-weight: 500;
+}
+
+.splash-subtitle {
+    color: #64748b;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    margin-top: 1rem;
+}
+
+@keyframes splash-pulse {
+
+    0%,
+    100% {
+        opacity: 1;
+    }
+
+    50% {
+        opacity: 0.5;
+    }
 }
