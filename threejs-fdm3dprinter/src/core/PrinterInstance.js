@@ -9,6 +9,7 @@ import { StreamProvider } from '../providers/StreamProvider.js';
 import { SimulationEngine } from '../engine/SimulationEngine.js';
 import { PRINTER_CONFIG } from '../../config/printer_config.js';
 import { TelemetryMocker } from '../services/TelemetryMocker.js';
+import { DbTelemetryReplay } from '../services/DbTelemetryReplay.js';
 
 /**
  * @file PrinterInstance.js
@@ -77,10 +78,19 @@ export class PrinterInstance {
     mqttService.registerPrinter(id, this.stream, prefix);
     console.log(`[Printer ${id}] 📡 Registered for MQTT prefix: ${prefix}`);
 
-    // 7. Initialise Telemetry Mocker
-    this.mocker = new TelemetryMocker(id, (topic, data) => {
-      this.mqttService.publish(topic, data);
-    });
+    // 7. Shared publish callback — injects directly into MqttService's internal
+    // message handler without roundtripping through Mosquitto. Zero external dependencies.
+    const _mockPublish = (topic, data) => {
+      const brokerUrl = PRINTER_CONFIG.MQTT.BROKER_URL;
+      const payloadStr = typeof data === 'string' ? data : JSON.stringify(data);
+      this.mqttService._handleMessage(brokerUrl, topic, payloadStr);
+    };
+
+    // Synthetic mocker (generates data in-process)
+    this.mocker = new TelemetryMocker(id, _mockPublish);
+
+    // DB replay (plays back real recorded telemetry)
+    this.dbReplay = new DbTelemetryReplay(id, _mockPublish);
   }
 
   /**
@@ -91,9 +101,12 @@ export class PrinterInstance {
   async switchMode(mode, options = {}) {
     console.log(`[Printer ${this.id}] 🔄 Switching to ${mode} mode...`);
     
-    // Stop mocker silently (no PrintDone event) when switching away
+    // Stop any active mock source silently when switching away
     if (this.mocker && this.mocker.intervalId) {
       this.mocker.stopSilent();
+    }
+    if (this.dbReplay?.isRunning) {
+      this.dbReplay.stopSilent();
     }
 
     this.currentProvider.stop();
@@ -109,14 +122,14 @@ export class PrinterInstance {
         this.mqttService.disconnect(oldBrokerUrl);
       }
     } else if (mode === 'mock_replay') {
+      // Mock mode is fully self-contained: the TelemetryMocker injects frames
+      // directly into _handleMessage(), so no MQTT broker connection is needed.
       this.currentProvider = this.stream;
-      if (this.mqttService) {
-        const brokerUrl = PRINTER_CONFIG.MQTT.BROKER_URL;
-        const entry = this.mqttService.instances.get(this.id);
-        if (entry) entry.brokerUrl = brokerUrl;
-        // Only connect — mocker is started manually by the user via the Start button
-        await this.mqttService.connect(brokerUrl);
-      }
+      // Ensure the instance entry has the correct brokerUrl for routing
+      const entry = this.mqttService?.instances.get(this.id);
+      if (entry) entry.brokerUrl = PRINTER_CONFIG.MQTT.BROKER_URL;
+      // Start the sensor flush loop (IMU / flow aggregation) without a broker
+      this.mqttService?.startSensorFlusher();
     } else {
       this.currentProvider = this.stream;
       if (this.mqttService && PRINTER_CONFIG.MQTT.ENABLED) {
@@ -154,9 +167,12 @@ export class PrinterInstance {
   dispose() {
     console.log(`[Printer ${this.id}] 🧹 Disposing resources...`);
     
-    // 1. Halt the simulation mocker if active
+    // 1. Halt any active mock source
     if (this.mocker) {
       this.mocker.stopSilent();
+    }
+    if (this.dbReplay) {
+      this.dbReplay.stopSilent();
     }
 
     // 2. Stop providers

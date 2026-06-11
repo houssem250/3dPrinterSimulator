@@ -36,6 +36,8 @@ export function FleetSidebar() {
   const [selectedPort, setSelectedPort] = useState('AUTO');
   const [selectedBaudrate, setSelectedBaudrate] = useState('AUTO');
   const [isConnecting, setIsConnecting] = useState(false);
+  // DB replay selector: '' = use synthetic mocker, otherwise a DB path
+  const [selectedDb, setSelectedDb] = useState('/sample_telemetry/telemetry_normal_3.db');
 
   const filteredGroups = fleetGroups.map(group => ({
     ...group,
@@ -203,12 +205,73 @@ export function FleetSidebar() {
     if (activeJob.mode === 'mock_replay') {
       const { AppContext } = await import('../../../app_context.js');
       const printer = AppContext.farm.printers.find(p => p.id === activePrinterId);
+      if (!printer) return;
+
+      // ── DB Replay path ──────────────────────────────────────────────────────
+      if (selectedDb) {
+        if (printer.dbReplay.isRunning) {
+          addLogEntry('DB REPLAY: Already running.', 'SYS');
+          return;
+        }
+
+        const dbName = selectedDb.split('/').pop();
+
+        // If already loaded with the same file, just start replay
+        if (printer.dbReplay.isLoaded && printer.dbReplay._dbPath === selectedDb) {
+          printer.dbReplay.start();
+          updateActiveJob({
+            isPrinting: true,
+            isPaused: false,
+            fileName: dbName,
+            progress: 0
+          });
+          addLogEntry(`DB REPLAY: Playback started [${dbName}]`, 'SYS');
+          return;
+        }
+
+        // Show loading state in the filename + progress bar
+        updateActiveJob({
+          isPrinting: false,
+          fileName: `Loading ${dbName}…`,
+          progress: 0
+        });
+        addLogEntry(`DB REPLAY: Fetching ${dbName}…`, 'SYS');
+
+        try {
+          await printer.dbReplay.load(selectedDb, {
+            onProgress: (pct) => {
+              updateActiveJob({ progress: pct, fileName: `Loading ${dbName}… ${pct}%` });
+            },
+            onReady: () => {
+              addLogEntry(`DB REPLAY: ${dbName} ready — ${printer.dbReplay.total} rows`, 'SYS');
+            },
+            onFinished: () => {
+              updateActiveJob({ isPrinting: false, isPaused: false, progress: 100 });
+              addLogEntry('DB REPLAY: Playback complete.', 'SYS');
+            }
+          });
+
+          printer.dbReplay.start();
+          updateActiveJob({
+            isPrinting: true,
+            isPaused: false,
+            fileName: dbName,
+            progress: 0
+          });
+          addLogEntry(`DB REPLAY: Playback started [${dbName}]`, 'SYS');
+        } catch (err) {
+          updateActiveJob({ fileName: 'Load failed — check console', progress: 0 });
+          addLogEntry(`DB REPLAY ERROR: ${err.message}`, 'SYS');
+        }
+        return;
+      }
+
+      // ── Synthetic mocker fallback ───────────────────────────────────────────
       if (printer?.mocker) {
         if (printer.mocker.intervalId) {
           addLogEntry("MOCK: Simulation already running.", "SYS");
           return;
         }
-        // start() resets state and emits PrintStarted → timeline will log it
         printer.mocker.start();
         updateActiveJob({ isPrinting: true, isPaused: false, fileName: "Benchy_Mock_Print.gcode" });
         addLogEntry("MOCK: Simulated print started.", "SYS");
@@ -252,6 +315,23 @@ export function FleetSidebar() {
     if (activeJob.mode === 'mock_replay') {
       const { AppContext } = await import('../../../app_context.js');
       const printer = AppContext.farm.printers.find(p => p.id === activePrinterId);
+      if (!printer) return;
+
+      // DB replay pause/resume
+      if (selectedDb && printer.dbReplay?.isLoaded) {
+        if (activeJob.isPaused) {
+          printer.dbReplay.resume();
+          updateActiveJob({ isPaused: false });
+          addLogEntry('DB REPLAY: Resumed.', 'SYS');
+        } else {
+          printer.dbReplay.pause();
+          updateActiveJob({ isPaused: true });
+          addLogEntry('DB REPLAY: Paused.', 'SYS');
+        }
+        return;
+      }
+
+      // Synthetic mocker pause/resume
       if (printer?.mocker) {
         if (activeJob.isPaused) {
           printer.mocker.resume();
@@ -296,8 +376,18 @@ export function FleetSidebar() {
     if (activeJob.mode === 'mock_replay') {
       const { AppContext } = await import('../../../app_context.js');
       const printer = AppContext.farm.printers.find(p => p.id === activePrinterId);
+      if (!printer) return;
+
+      // DB replay stop
+      if (selectedDb && printer.dbReplay?.isLoaded) {
+        printer.dbReplay.stop();
+        updateActiveJob({ isPrinting: false, isPaused: false, progress: 0, fileName: 'No file selected' });
+        addLogEntry('DB REPLAY: Stopped.', 'SYS');
+        return;
+      }
+
+      // Synthetic mocker stop
       if (printer?.mocker) {
-        // stop() emits PrintDone event → timeline will log "Print Completed"
         printer.mocker.stop();
         updateActiveJob({ isPrinting: false, isPaused: false, progress: 0 });
         addLogEntry("MOCK: Simulated print stopped.", "SYS");
@@ -771,6 +861,30 @@ export function FleetSidebar() {
                     )}
                   </div>
                 )}
+                {/* DB selector — only shown in mock_replay mode */}
+                {activeJob.mode === 'mock_replay' && (
+                  <div style={{ marginBottom: '8px' }}>
+                    <label style={{ fontSize: '9px', color: 'var(--text-dim)', letterSpacing: '0.05em', display: 'block', marginBottom: '4px' }}>TELEMETRY SOURCE</label>
+                    <select
+                      className="industrial-select"
+                      style={{ width: '100%', fontSize: '11px' }}
+                      value={selectedDb}
+                      onChange={(e) => {
+                        setSelectedDb(e.target.value);
+                        // Reset filename when switching DB
+                        if (!activeJob.isPrinting) {
+                          updateActiveJob({ fileName: 'No file selected', progress: 0 });
+                        }
+                      }}
+                      disabled={activeJob.isPrinting}
+                    >
+                      <option value="">— Synthetic (generated) —</option>
+                      <option value="/sample_telemetry/telemetry_normal_3.db">Normal Print (telemetry_normal_3.db)</option>
+                      <option value="/sample_telemetry/telemetry_temp_err.db">Thermal Fault (telemetry_temp_err.db)</option>
+                    </select>
+                  </div>
+                )}
+
                 <div className="job-status-card" style={{ marginBottom: "5px" }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
                     <label style={{ fontSize: '9px', color: 'var(--text-dim)', letterSpacing: '0.05em' }}>ACTIVE FILE</label>

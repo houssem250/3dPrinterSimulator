@@ -79,16 +79,24 @@ export class MqttService {
    * Connects to a specific Mosquitto broker via WebSockets.
    * @param {string} [overrideUrl] Optional broker URL (e.g. ws://192.168.1.42:9001)
    */
-  async connect(overrideUrl = null) {
-    const brokerUrl = overrideUrl || PRINTER_CONFIG.MQTT.BROKER_URL;
-
-    // Start the 1-second sensor flush interval
+  /**
+   * Starts the sensor aggregation flush loop independently of the broker connection.
+   * Call this in mock mode to enable vibration/flow data aggregation without MQTT.
+   */
+  startSensorFlusher() {
     if (!this.batchInterval) {
       this.vibWindowTime = Date.now();
       this.batchInterval = setInterval(() => {
         this._flushSensorBuffers();
       }, 1000);
     }
+  }
+
+  async connect(overrideUrl = null) {
+    const brokerUrl = overrideUrl || PRINTER_CONFIG.MQTT.BROKER_URL;
+
+    // Start the 1-second sensor flush interval (idempotent)
+    this.startSensorFlusher();
 
     if (this.clients.has(brokerUrl)) {
       console.log(`ℹ️ MQTT: Already connected/connecting to ${brokerUrl}`);
